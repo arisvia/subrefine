@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>subrefine 控制台</title>
+  <style>
+    :root {
+      --bg: #090a0f;
+      --surface: #13151f;
+      --surface-border: #232738;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --danger: #ef4444;
+      --success: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+    }
+    .container { width: 100%; max-width: 900px; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--surface-border);
+    }
+    h1 { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.4);
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .input-row { display: flex; gap: 10px; margin-top: 12px; }
+    input, textarea, select {
+      background: #0d0f17;
+      border: 1px solid var(--surface-border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      width: 100%;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s ease;
+    }
+    button:hover { background: var(--accent-hover); }
+    button.danger { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    button.danger:hover { background: var(--danger); color: #fff; }
+    .sub-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      background: #0d0f17;
+      border: 1px solid var(--surface-border);
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .sub-info h3 { font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .sub-info p { font-size: 12px; color: var(--text-muted); }
+    .sub-links { display: flex; gap: 8px; margin-top: 8px; }
+    .sub-links a {
+      font-size: 12px;
+      color: #818cf8;
+      text-decoration: none;
+      background: rgba(99, 102, 241, 0.1);
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+    .sub-links a:hover { text-decoration: underline; }
+    .hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+    #authOverlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(9, 10, 15, 0.95);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .auth-box {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      padding: 30px;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 380px;
+      text-align: center;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="authOverlay">
+    <div class="auth-box">
+      <h2 style="margin-bottom: 12px; font-size: 18px;">subrefine 认证</h2>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">请输入系统 Admin Token 访问控制台</p>
+      <input type="password" id="adminTokenInput" placeholder="输入 Admin Token..." />
+      <button style="width: 100%; margin-top: 14px;" onclick="authenticate()">解锁后台</button>
+      <div id="authError" style="color: var(--danger); font-size: 12px; margin-top: 10px;" class="hidden">Token 认证失败，请检查</div>
+    </div>
+  </div>
+
+  <div class="container">
+    <header>
+      <h1>⚡ subrefine <span class="badge">原生内存 &lt; 15MB</span></h1>
+      <div>
+        <button onclick="logout()" style="background: transparent; color: var(--text-muted); border: 1px solid var(--surface-border); font-size: 12px; padding: 6px 12px;">注销 Token</button>
+      </div>
+    </header>
+
+    <div class="card">
+      <h2 style="font-size: 16px; margin-bottom: 8px;">新建 / 更新订阅</h2>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <input type="text" id="subId" placeholder="订阅 ID (唯一标识，如 hk-route)" />
+        <input type="text" id="subName" placeholder="订阅名称 (如 香港优化集群)" />
+      </div>
+      <div class="input-row">
+        <input type="text" id="subToken" placeholder="订阅专属密钥 Sub Token (如 secret-888)" />
+      </div>
+      <div class="input-row">
+        <textarea id="subSources" rows="3" placeholder="订阅源 (支持多行：https://... 订阅 URL，或直接填写 ss://, vless://, hy2:// URI)"></textarea>
+      </div>
+      <div class="hint">每行一个节点链接或远程订阅地址，支持 Base64、Clash YAML、sing-box JSON 格式自动探测。</div>
+      <div style="margin-top: 14px; text-align: right;">
+        <button onclick="saveSubscription()">保存并启用订阅</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size: 16px; margin-bottom: 14px;">当前已托管订阅 (<span id="subCount">0</span>)</h2>
+      <div id="subList">
+        <div style="color: var(--text-muted); font-size: 13px;">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let token = localStorage.getItem('subrefine_admin_token') || '';
+
+    function checkAuth() {
+      if (!token) {
+        document.getElementById('authOverlay').classList.remove('hidden');
+        return;
+      }
+      fetch('/api/admin/info', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      }).then(res => {
+        if (res.ok) {
+          document.getElementById('authOverlay').classList.add('hidden');
+          loadSubscriptions();
+        } else {
+          document.getElementById('authOverlay').classList.remove('hidden');
+        }
+      }).catch(() => {
+        document.getElementById('authOverlay').classList.remove('hidden');
+      });
+    }
+
+    function authenticate() {
+      const val = document.getElementById('adminTokenInput').value.trim();
+      if (!val) return;
+      fetch('/api/admin/info', {
+        headers: { 'Authorization': 'Bearer ' + val }
+      }).then(res => {
+        if (res.ok) {
+          token = val;
+          localStorage.setItem('subrefine_admin_token', token);
+          document.getElementById('authOverlay').classList.add('hidden');
+          document.getElementById('authError').classList.add('hidden');
+          loadSubscriptions();
+        } else {
+          document.getElementById('authError').classList.remove('hidden');
+        }
+      }).catch(() => {
+        document.getElementById('authError').classList.remove('hidden');
+      });
+    }
+
+    function logout() {
+      localStorage.removeItem('subrefine_admin_token');
+      token = '';
+      location.reload();
+    }
+
+    function loadSubscriptions() {
+      fetch('/api/admin/subscriptions', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      }).then(res => res.json()).then(data => {
+        const list = Array.isArray(data) ? data : [];
+        document.getElementById('subCount').innerText = list.length;
+        const container = document.getElementById('subList');
+        if (list.length === 0) {
+          container.innerHTML = '<div style="color: var(--text-muted); font-size: 13px;">暂无订阅，请在上方添加</div>';
+          return;
+        }
+        container.innerHTML = list.map(sub => `
+          <div class="sub-item">
+            <div class="sub-info">
+              <h3>${escapeHtml(sub.name || sub.id)} <span class="badge" style="border-color: #3b82f6; color: #60a5fa;">${escapeHtml(sub.id)}</span></h3>
+              <p>源数量: ${(sub.sources || []).length} | 状态: ${sub.enabled ? '已启用' : '已停用'}</p>
+              <div class="sub-links">
+                <a href="/s/${sub.id}?token=${encodeURIComponent(sub.token)}&target=sing-box" target="_blank">sing-box JSON</a>
+                <a href="/s/${sub.id}?token=${encodeURIComponent(sub.token)}&target=clash" target="_blank">Clash YAML</a>
+                <a href="/s/${sub.id}?token=${encodeURIComponent(sub.token)}&target=uri" target="_blank">Base64 URI</a>
+              </div>
+            </div>
+            <div>
+              <button class="danger" onclick="deleteSub('${escapeHtml(sub.id)}')">删除</button>
+            </div>
+          </div>
+        `).join('');
+      });
+    }
+
+    function saveSubscription() {
+      const id = document.getElementById('subId').value.trim();
+      const name = document.getElementById('subName').value.trim();
+      const subToken = document.getElementById('subToken').value.trim();
+      const sources = document.getElementById('subSources').value.split('\n').map(s => s.trim()).filter(Boolean);
+
+      if (!id || !subToken) {
+        alert('订阅 ID 与 Sub Token 不能为空');
+        return;
+      }
+
+      const body = {
+        id,
+        name: name || id,
+        token: subToken,
+        sources,
+        enabled: true,
+        pipeline: [{ type: 'deduplicate' }]
+      };
+
+      fetch('/api/admin/subscriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      }).then(res => res.json()).then(res => {
+        if (res.status === 'ok') {
+          document.getElementById('subId').value = '';
+          document.getElementById('subName').value = '';
+          document.getElementById('subToken').value = '';
+          document.getElementById('subSources').value = '';
+          loadSubscriptions();
+        } else {
+          alert('保存失败: ' + (res.error || 'unknown'));
+        }
+      });
+    }
+
+    function deleteSub(id) {
+      if (!confirm(`确认删除订阅 [${id}] 吗?`)) return;
+      fetch('/api/admin/subscriptions/' + encodeURIComponent(id), {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + token }
+      }).then(() => loadSubscriptions());
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    checkAuth();
+  </script>
+</body>
+</html>
