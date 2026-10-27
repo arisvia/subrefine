@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -63,6 +64,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/admin/subscriptions", s.adminAuthMiddleware(s.handleAdminListSubscriptions))
 	s.mux.HandleFunc("POST /api/admin/subscriptions", s.adminAuthMiddleware(s.handleAdminSaveSubscription))
 	s.mux.HandleFunc("DELETE /api/admin/subscriptions/{id}", s.adminAuthMiddleware(s.handleAdminDeleteSubscription))
+	s.mux.HandleFunc("GET /api/admin/subscriptions/{id}/nodes", s.adminAuthMiddleware(s.handleAdminPreviewNodes))
 
 	// Embedded WebUI handler
 	distFS, err := fs.Sub(webui.FS, "dist")
@@ -142,6 +144,28 @@ func (s *Server) handleAdminDeleteSubscription(w http.ResponseWriter, r *http.Re
 	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+}
+
+func (s *Server) handleAdminPreviewNodes(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	id := r.PathValue("id")
+	sub, err := s.storage.Get(id)
+	if err != nil {
+		http.Error(w, `{"error":"subscription not found"}`, http.StatusNotFound)
+		return
+	}
+
+	nodes, err := s.subManager.GetSubscription(id, sub.Token)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"failed to fetch nodes: %s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"id":    id,
+		"count": len(nodes),
+		"nodes": nodes,
+	})
 }
 
 // DetectTarget negotiates the target format based on query parameter 'target' or client User-Agent.
