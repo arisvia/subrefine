@@ -1,0 +1,32 @@
+# Binaries & build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/dist/
+build/
+subrefine*
+*backup*.json
+
+# Go test / coverage artifacts
+*.test
+*.out
+*.prof
+
+# Runtime data
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.log
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
