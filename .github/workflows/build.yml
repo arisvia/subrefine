@@ -1,0 +1,42 @@
+name: CI / PR Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Lint, Test & Smoke Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.27'
+          cache: true
+
+      - name: Go Format & Vet
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Unformatted Go code found:"
+            gofmt -d .
+            exit 1
+          fi
+          go vet ./...
+
+      - name: Go Test with Race Detector
+        run: go test -race ./...
+
+      - name: Smoke Build Binary
+        run: |
+          CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=ci-smoke" -o subrefine ./cmd/subrefine/
+          ./subrefine -host 127.0.0.1 -port 29999 &
+          PID=$!
+          sleep 2
+          curl -fsS http://127.0.0.1:29999/healthz || (kill -9 $PID && exit 1)
+          kill -9 $PID
