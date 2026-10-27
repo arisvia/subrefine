@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/core/model"
 )
 
 var (

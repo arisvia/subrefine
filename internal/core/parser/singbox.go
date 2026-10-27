@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/core/model"
 )
 
 type singboxRoot struct {

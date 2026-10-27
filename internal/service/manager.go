@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"subrefine/internal/auth"
-	"subrefine/internal/core/fetcher"
-	"subrefine/internal/core/model"
-	"subrefine/internal/core/parser"
-	"subrefine/internal/core/pipeline"
-	"subrefine/internal/storage"
+	"github.com/arisvia/subrefine/internal/auth"
+	"github.com/arisvia/subrefine/internal/core/fetcher"
+	"github.com/arisvia/subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/core/parser"
+	"github.com/arisvia/subrefine/internal/core/pipeline"
+	"github.com/arisvia/subrefine/internal/storage"
 )
 
 var (

@@ -3,7 +3,7 @@ package emitter
 import (
 	"encoding/json"
 	"fmt"
-	"subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/core/model"
 )
 
 // ToSingboxOutbound converts a single ProxyNode into a sing-box 1.15 outbound map.

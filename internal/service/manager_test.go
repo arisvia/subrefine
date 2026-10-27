@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"subrefine/internal/core/fetcher"
-	"subrefine/internal/service"
-	"subrefine/internal/storage"
+	"github.com/arisvia/subrefine/internal/core/fetcher"
+	"github.com/arisvia/subrefine/internal/service"
+	"github.com/arisvia/subrefine/internal/storage"
 )
 
 func TestStorageAndService(t *testing.T) {

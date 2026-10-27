@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"strings"
 
-	"subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/core/model"
 )
 
 // ParseSubscription auto-detects subscription content (Base64 list, Clash YAML, sing-box JSON)

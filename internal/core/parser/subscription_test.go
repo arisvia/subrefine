@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"subrefine/internal/core/emitter"
-	"subrefine/internal/core/fetcher"
-	"subrefine/internal/core/model"
-	"subrefine/internal/core/parser"
+	"github.com/arisvia/subrefine/internal/core/emitter"
+	"github.com/arisvia/subrefine/internal/core/fetcher"
+	"github.com/arisvia/subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/core/parser"
 )
 
 func sampleNodes() []*model.ProxyNode {

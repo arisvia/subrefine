@@ -3,8 +3,8 @@ package emitter
 import (
 	"fmt"
 
+	"github.com/arisvia/subrefine/internal/core/model"
 	"gopkg.in/yaml.v3"
-	"subrefine/internal/core/model"
 )
 
 // ToClashProxy converts a single ProxyNode into a Clash.Meta compatible map.

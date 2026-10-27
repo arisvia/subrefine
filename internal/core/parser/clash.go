@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/arisvia/subrefine/internal/core/model"
 	"gopkg.in/yaml.v3"
-	"subrefine/internal/core/model"
 )
 
 type clashFile struct {

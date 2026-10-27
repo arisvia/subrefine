@@ -3,9 +3,9 @@ package parser_test
 import (
 	"testing"
 
-	"subrefine/internal/core/emitter"
-	"subrefine/internal/core/model"
-	"subrefine/internal/core/parser"
+	"github.com/arisvia/subrefine/internal/core/emitter"
+	"github.com/arisvia/subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/core/parser"
 )
 
 func TestParseAndEmitURI(t *testing.T) {

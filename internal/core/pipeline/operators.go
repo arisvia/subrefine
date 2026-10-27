@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/core/model"
 )
 
 // RegexRename applies regex pattern replacement to node tags.

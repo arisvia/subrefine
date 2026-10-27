@@ -3,14 +3,24 @@ package api
 import (
 	"encoding/base64"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"strings"
 
-	"subrefine/internal/auth"
-	"subrefine/internal/config"
-	"subrefine/internal/core/emitter"
-	"subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/auth"
+	"github.com/arisvia/subrefine/internal/config"
+	"github.com/arisvia/subrefine/internal/core/emitter"
+	"github.com/arisvia/subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/storage"
+	"github.com/arisvia/subrefine/webui"
 )
+
+type SubStorage interface {
+	Get(id string) (*storage.Subscription, error)
+	List() []*storage.Subscription
+	Save(sub *storage.Subscription) error
+	Delete(id string) error
+}
 
 // SubManager is the interface for retrieving subscription nodes and verifying sub tokens.
 type SubManager interface {
@@ -27,13 +37,15 @@ const (
 type Server struct {
 	cfg        *config.Config
 	subManager SubManager
+	storage    SubStorage
 	mux        *http.ServeMux
 }
 
-func NewServer(cfg *config.Config, sm SubManager) *Server {
+func NewServer(cfg *config.Config, sm SubManager, st SubStorage) *Server {
 	s := &Server{
 		cfg:        cfg,
 		subManager: sm,
+		storage:    st,
 		mux:        http.NewServeMux(),
 	}
 	s.registerRoutes()
@@ -48,6 +60,18 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /s/{id}", s.handleSubscribe)
 	s.mux.HandleFunc("GET /api/admin/info", s.adminAuthMiddleware(s.handleAdminInfo))
+	s.mux.HandleFunc("GET /api/admin/subscriptions", s.adminAuthMiddleware(s.handleAdminListSubscriptions))
+	s.mux.HandleFunc("POST /api/admin/subscriptions", s.adminAuthMiddleware(s.handleAdminSaveSubscription))
+	s.mux.HandleFunc("DELETE /api/admin/subscriptions/{id}", s.adminAuthMiddleware(s.handleAdminDeleteSubscription))
+
+	// Embedded WebUI handler
+	distFS, err := fs.Sub(webui.FS, "dist")
+	if err == nil {
+		fileServer := http.FileServer(http.FS(distFS))
+		s.mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+			fileServer.ServeHTTP(w, r)
+		})
+	}
 }
 
 func (s *Server) adminAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -75,6 +99,49 @@ func (s *Server) handleAdminInfo(w http.ResponseWriter, r *http.Request) {
 		"host":    s.cfg.Host,
 		"port":    s.cfg.Port,
 	})
+}
+func (s *Server) handleAdminListSubscriptions(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if s.storage == nil {
+		json.NewEncoder(w).Encode([]any{})
+		return
+	}
+	subs := s.storage.List()
+	json.NewEncoder(w).Encode(subs)
+}
+
+func (s *Server) handleAdminSaveSubscription(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if s.storage == nil {
+		http.Error(w, `{"error":"storage unavailable"}`, http.StatusInternalServerError)
+		return
+	}
+	var sub storage.Subscription
+	if err := json.NewDecoder(r.Body).Decode(&sub); err != nil || sub.ID == "" {
+		http.Error(w, `{"error":"invalid subscription body"}`, http.StatusBadRequest)
+		return
+	}
+	if err := s.storage.Save(&sub); err != nil {
+		http.Error(w, `{"error":"save failed"}`, http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{"status": "ok", "sub": sub})
+}
+
+func (s *Server) handleAdminDeleteSubscription(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	id := r.PathValue("id")
+	if s.storage == nil {
+		http.Error(w, `{"error":"storage unavailable"}`, http.StatusInternalServerError)
+		return
+	}
+	if err := s.storage.Delete(id); err != nil {
+		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
 }
 
 // DetectTarget negotiates the target format based on query parameter 'target' or client User-Agent.

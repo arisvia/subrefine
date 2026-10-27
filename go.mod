@@ -1,4 +1,4 @@
-module subrefine
+module github.com/arisvia/subrefine
 
 go 1.27.3
 

@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"subrefine/internal/core/model"
-	"subrefine/internal/core/parser"
+	"github.com/arisvia/subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/core/parser"
 )
 
 type Fetcher struct {

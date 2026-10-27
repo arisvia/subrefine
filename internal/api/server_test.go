@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"subrefine/internal/api"
-	"subrefine/internal/config"
-	"subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/api"
+	"github.com/arisvia/subrefine/internal/config"
+	"github.com/arisvia/subrefine/internal/core/model"
 )
 
 type mockSubManager struct {
@@ -48,7 +48,7 @@ func TestAPIServer(t *testing.T) {
 		},
 	}
 
-	server := api.NewServer(cfg, mockSM)
+	server := api.NewServer(cfg, mockSM, nil)
 	handler := server.Handler()
 
 	t.Run("Healthz", func(t *testing.T) {
@@ -133,6 +133,19 @@ func TestAPIServer(t *testing.T) {
 		}
 		if !strings.Contains(string(decoded), "ss://") {
 			t.Fatalf("expected decoded content to contain ss://, got %s", string(decoded))
+		}
+	})
+
+	t.Run("WebUI Index Route", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "subrefine 控制台") {
+			t.Fatalf("expected embedded html title, got %s", rec.Body.String())
 		}
 	})
 }
