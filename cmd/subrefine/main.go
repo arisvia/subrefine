@@ -58,6 +58,10 @@ func main() {
 		cfg.DataDir = *dataDirFlag
 	}
 
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("refusing to start: %v", err)
+	}
+
 	store, err := storage.New(cfg.DataDir)
 	if err != nil {
 		log.Fatalf("failed to init storage: %v", err)

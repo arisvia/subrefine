@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"net"
 	"os"
 	"strconv"
@@ -12,15 +13,30 @@ type Config struct {
 	AdminToken   string `json:"admin_token" yaml:"admin_token"`
 	DataDir      string `json:"data_dir" yaml:"data_dir"`
 	DashboardDir string `json:"dashboard_dir" yaml:"dashboard_dir"`
+	// TrustProxy makes the auth limiter key off X-Forwarded-For. Only enable it
+	// when a proxy you control rewrites that header, otherwise any client can
+	// pick its own throttle bucket by sending a header.
+	TrustProxy bool `json:"trust_proxy" yaml:"trust_proxy"`
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		Host:       "0.0.0.0",
-		Port:       3000,
-		AdminToken: "subrefine_secret_token",
+		Host: "0.0.0.0",
+		Port: 3000,
+		// No token ships with the binary: an operator must supply one, so a
+		// deployment can never come up protected by a credential that is public
+		// in the repository.
+		AdminToken: "",
 		DataDir:    "./data",
 	}
+}
+
+// Validate reports configuration that would start an unsafe server.
+func (c *Config) Validate() error {
+	if c.AdminToken == "" {
+		return errors.New("no admin token configured; set SUBREFINE_ADMIN_TOKEN (systemd: Environment=SUBREFINE_ADMIN_TOKEN=...)")
+	}
+	return nil
 }
 
 // LoadFromEnv loads configuration overrides from environment variables.
@@ -44,6 +60,11 @@ func LoadFromEnv(cfg *Config) {
 	}
 	if dir := os.Getenv("SUBREFINE_DASHBOARD"); dir != "" {
 		cfg.DashboardDir = dir
+	}
+	if v := os.Getenv("SUBREFINE_TRUST_PROXY"); v != "" {
+		if trust, err := strconv.ParseBool(v); err == nil {
+			cfg.TrustProxy = trust
+		}
 	}
 }
 
