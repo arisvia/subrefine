@@ -55,8 +55,10 @@ ws = pmc.WorkingSetSize / 1024 / 1024
 peak = pmc.PeakWorkingSetSize / 1024 / 1024
 print(f"working set      : {ws:.1f} MB")
 print(f"peak working set : {peak:.1f} MB")
-# Measured plateau: 17.0 MiB working set over 60 identical delivery passes,
-# while gc trace reports a ~1 MiB live heap (image + embedded console pages dominate).
+# Measured plateau: ~15.2 MiB working set over repeated delivery passes after
+# the bundled CJK fonts were dropped (was ~17 MiB with them); gc trace reports
+# a ~1 MiB live heap - image pages and on-demand console assets dominate.
+# 18 MiB is a regression gate, not a target (15MB is no longer defended).
 print("target < 18MB    :", "PASS" if ws < 18 else "FAIL")
 sys.exit(0 if ws < 18 else 1)
 PY
