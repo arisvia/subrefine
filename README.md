@@ -39,11 +39,18 @@ http://<host>:3000/s/<id>?token=<订阅 token>&target=sing-box
 |---|---|---|---|
 | `SUBREFINE_HOST` | `-host` | `0.0.0.0` | 监听地址 |
 | `SUBREFINE_PORT` | `-port` | `3000` | 监听端口 |
-| `SUBREFINE_ADMIN_TOKEN` | | `subrefine_secret_token` | 管理令牌；内置默认值必须覆盖，置空则管理接口一律拒绝 |
+| `SUBREFINE_ADMIN_TOKEN` | | 无（必填） | 管理令牌；未设置时进程拒绝启动，不再内置默认值 |
 | `SUBREFINE_DATA_DIR` | `-data` | `./data` | 订阅定义持久化目录 |
 | `SUBREFINE_DASHBOARD` | | 空 | 用磁盘目录替换内嵌控制台（前端开发用） |
+| `SUBREFINE_TRUST_PROXY` | | `false` | 仅在可信反代之后开启：以 `X-Forwarded-For` 识别限流客户端地址 |
 
 运行时默认 `GOGC=50`、`GOMEMLIMIT=12MiB`；若已设置同名环境变量则不覆盖。
+
+安全行为：
+
+- **管理接口限流**：同一客户端地址 5 分钟内失败 20 次触发 `429 + Retry-After`；限流期间即使令牌正确也会被拒绝，窗口结束自动恢复。未被限流时，一次成功登录即清零计数。`SUBREFINE_TRUST_PROXY=true` 时按 `X-Forwarded-For` 分桶（仅当反代会重写该头，否则客户端可自选限流桶）。`/s/{id}` 客户端分发不参与限流，避免误伤机场用户。
+- **控制台安全头**：响应带 CSP（脚本仅同源）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`。管理令牌存于浏览器 `localStorage`，注入脚本可读，故 CSP 必须收紧。
+- **保存即校验**：未知算子、非法正则、无法识别的协议白名单在保存时被 `400` 拒绝，不会静默放行错误配置。
 
 ## HTTP API
 
@@ -55,7 +62,7 @@ http://<host>:3000/s/<id>?token=<订阅 token>&target=sing-box
 | `GET` | `/api/admin/subscriptions` | 管理令牌 | 订阅列表 |
 | `POST` | `/api/admin/subscriptions` | 管理令牌 | 新建或覆盖订阅 |
 | `DELETE` | `/api/admin/subscriptions/{id}` | 管理令牌 | 删除订阅 |
-| `GET` | `/api/admin/subscriptions/{id}/nodes` | 管理令牌 | 拉取并执行管线，返回归一化节点 |
+| `GET` | `/api/admin/subscriptions/{id}/nodes` | 管理令牌 | 拉取并执行管线，返回归一化节点与对应分享 URI |
 | `GET` | `/` | 无（前端自行登录） | 内嵌控制台 |
 
 ## 开发
@@ -76,7 +83,7 @@ npm run typecheck && npm run test && npm run build
 ```bash
 python localtest/serve_fixture.py &      # 本地订阅源
 go build -o subrefine-test.exe ./cmd/subrefine
-bash localtest/run_e2e.sh                # 69 项功能 + 分发 + 控制台断言 + 内存门槛
+bash localtest/run_e2e.sh                # 75 项功能 + 分发 + 失败路径 + 控制台断言 + 内存门槛
 python localtest/mem_plateau.py          # 内存平台/泄漏观察（SR_PASSES/SR_ROUNDS/SR_TRAFFIC 可调）
 ```
 
