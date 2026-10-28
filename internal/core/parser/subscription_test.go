@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,6 +146,55 @@ func TestClashRoundTrip(t *testing.T) {
 	}
 	if parsed[3].Tag != "Hy2-Test" || parsed[3].UpMbps != 50 {
 		t.Fatalf("Hy2 mismatch")
+	}
+}
+
+func TestParseSubscriptionDetectsEveryEnvelope(t *testing.T) {
+	orig := sampleNodes()
+
+	singboxJSON, err := emitter.ToSingboxJSON(orig)
+	if err != nil {
+		t.Fatalf("ToSingboxJSON: %v", err)
+	}
+	clashYAML, err := emitter.ToClashYAML(orig)
+	if err != nil {
+		t.Fatalf("ToClashYAML: %v", err)
+	}
+
+	plainURIs := ""
+	for _, n := range orig {
+		u, err := emitter.ToURI(n)
+		if err != nil {
+			t.Fatalf("ToURI: %v", err)
+		}
+		plainURIs += u + "\n"
+	}
+
+	cases := map[string][]byte{
+		"sing-box json":              singboxJSON,
+		"sing-box json base64":       []byte(base64.StdEncoding.EncodeToString(singboxJSON)),
+		"clash yaml":                 clashYAML,
+		"clash yaml base64":          []byte(base64.StdEncoding.EncodeToString(clashYAML)),
+		"uri list plain":             []byte(plainURIs),
+		"uri list base64":            []byte(base64.StdEncoding.EncodeToString([]byte(plainURIs))),
+		"uri list base64 no newline": []byte(base64.StdEncoding.EncodeToString([]byte(strings.TrimRight(plainURIs, "\n")))),
+	}
+
+	for name, payload := range cases {
+		t.Run(name, func(t *testing.T) {
+			nodes, err := parser.ParseSubscription(payload)
+			if err != nil {
+				t.Fatalf("ParseSubscription error: %v", err)
+			}
+			if len(nodes) != len(orig) {
+				t.Fatalf("expected %d nodes, got %d", len(orig), len(nodes))
+			}
+			for i, n := range nodes {
+				if n.Tag != orig[i].Tag || n.Type != orig[i].Type || n.Server != orig[i].Server || n.Port != orig[i].Port {
+					t.Fatalf("node %d mismatch: got %s/%s/%s:%d", i, n.Tag, n.Type, n.Server, n.Port)
+				}
+			}
+		})
 	}
 }
 

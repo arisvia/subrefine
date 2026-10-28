@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -62,21 +63,14 @@ func parsePort(portStr string) (int, error) {
 }
 
 func parseShadowsocks(u *url.URL, tag string) (*model.ProxyNode, error) {
-	node := &model.ProxyNode{
-		Type: model.ProtoShadowsocks,
-		Tag:  tag,
-	}
-
+	// SIP002 "ss://BASE64(method:password@host:port #tag)" — everything after the
+	// scheme is one base64 blob, so url.Parse yields no userinfo.
 	if u.User == nil {
-		rawStr := u.Host
-		decoded, err := decodeBase64Safe(rawStr)
-		if err == nil && strings.Contains(string(decoded), "@") {
-			reparsed, err := url.Parse("ss://" + string(decoded))
-			if err == nil {
-				return parseShadowsocks(reparsed, tag)
-			}
+		decoded, err := decodeBase64Safe(u.Host)
+		if err != nil {
+			return nil, fmt.Errorf("%w: invalid ss format", ErrInvalidURI)
 		}
-		return nil, fmt.Errorf("%w: invalid ss format", ErrInvalidURI)
+		return parseShadowsocksPayload(string(decoded), tag)
 	}
 
 	userinfo := u.User.String()
@@ -92,16 +86,63 @@ func parseShadowsocks(u *url.URL, tag string) (*model.ProxyNode, error) {
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("%w: invalid ss method/password", ErrInvalidURI)
 	}
-	node.Method = parts[0]
-	node.Password = parts[1]
 
-	node.Server = u.Hostname()
 	port, err := parsePort(u.Port())
 	if err != nil {
 		return nil, err
 	}
-	node.Port = port
 
+	node := &model.ProxyNode{
+		Type:     model.ProtoShadowsocks,
+		Tag:      tag,
+		Method:   parts[0],
+		Password: parts[1],
+		Server:   u.Hostname(),
+		Port:     port,
+	}
+	if node.Tag == "" {
+		node.Tag = fmt.Sprintf("SS-%s:%d", node.Server, node.Port)
+	}
+	return node, nil
+}
+
+// parseShadowsocksPayload decodes "method:password@host:port[ #tag]", where the
+// tag may be introduced by '#' or by plain whitespace.
+func parseShadowsocksPayload(s, tag string) (*model.ProxyNode, error) {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexAny(s, " \t#"); i >= 0 {
+		if tag == "" {
+			tag = strings.TrimLeft(strings.TrimSpace(s[i:]), "#")
+		}
+		s = strings.TrimSpace(s[:i])
+	}
+
+	at := strings.LastIndex(s, "@")
+	if at < 0 {
+		return nil, fmt.Errorf("%w: ss payload missing @host:port", ErrInvalidURI)
+	}
+	parts := strings.SplitN(s[:at], ":", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("%w: invalid ss method/password", ErrInvalidURI)
+	}
+
+	host, portStr, err := net.SplitHostPort(s[at+1:])
+	if err != nil {
+		return nil, fmt.Errorf("%w: ss host:port: %v", ErrInvalidURI, err)
+	}
+	port, err := parsePort(portStr)
+	if err != nil {
+		return nil, err
+	}
+
+	node := &model.ProxyNode{
+		Type:     model.ProtoShadowsocks,
+		Tag:      tag,
+		Method:   parts[0],
+		Password: parts[1],
+		Server:   host,
+		Port:     port,
+	}
 	if node.Tag == "" {
 		node.Tag = fmt.Sprintf("SS-%s:%d", node.Server, node.Port)
 	}

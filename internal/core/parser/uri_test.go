@@ -1,12 +1,52 @@
 package parser_test
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/arisvia/subrefine/internal/core/emitter"
 	"github.com/arisvia/subrefine/internal/core/model"
 	"github.com/arisvia/subrefine/internal/core/parser"
 )
+
+func TestParseShadowsocksURIForms(t *testing.T) {
+	// Every spelling seen in the wild must land on the same node.
+	b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+	cases := []struct {
+		name, uri, method, password, server string
+		port                                int
+		tag                                 string
+	}{
+		{"userinfo b64", "ss://" + b64("aes-256-gcm:p") + "@1.2.3.4:8388#Tag", "aes-256-gcm", "p", "1.2.3.4", 8388, "Tag"},
+		{"userinfo plain", "ss://aes-256-gcm:p@1.2.3.4:8388#Tag", "aes-256-gcm", "p", "1.2.3.4", 8388, "Tag"},
+		{"whole payload", "ss://" + b64("aes-256-gcm:p@1.2.3.4:8388"), "aes-256-gcm", "p", "1.2.3.4", 8388, "SS-1.2.3.4:8388"},
+		{"whole payload hash", "ss://" + b64("aes-256-gcm:p@1.2.3.4:8388#Tag"), "aes-256-gcm", "p", "1.2.3.4", 8388, "Tag"},
+		{"whole payload space", "ss://" + b64("aes-256-gcm:p@1.2.3.4:8388 Tag"), "aes-256-gcm", "p", "1.2.3.4", 8388, "Tag"},
+		{"colon in password", "ss://" + b64("aes-256-gcm:p:p@1.2.3.4:8388 #Tag"), "aes-256-gcm", "p:p", "1.2.3.4", 8388, "Tag"},
+		{"ipv6 host", "ss://" + b64("aes-256-gcm:p@[2001:db8::1]:8388#V6"), "aes-256-gcm", "p", "2001:db8::1", 8388, "V6"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n, err := parser.ParseURI(tc.uri)
+			if err != nil {
+				t.Fatalf("ParseURI(%q): %v", tc.uri, err)
+			}
+			if n.Type != model.ProtoShadowsocks {
+				t.Fatalf("type: %s", n.Type)
+			}
+			if n.Method != tc.method || n.Password != tc.password {
+				t.Fatalf("creds: got %q/%q want %q/%q", n.Method, n.Password, tc.method, tc.password)
+			}
+			if n.Server != tc.server || n.Port != tc.port {
+				t.Fatalf("endpoint: got %s:%d want %s:%d", n.Server, n.Port, tc.server, tc.port)
+			}
+			if n.Tag != tc.tag {
+				t.Fatalf("tag: got %q want %q", n.Tag, tc.tag)
+			}
+		})
+	}
+}
 
 func TestParseAndEmitURI(t *testing.T) {
 	tests := []struct {
