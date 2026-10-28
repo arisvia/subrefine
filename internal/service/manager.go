@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +26,18 @@ var (
 type cacheItem struct {
 	nodes     []*model.ProxyNode
 	fetchedAt time.Time
+	// def pins the cache to the exact subscription definition it was built
+	// from, so editing sources or the pipeline takes effect on the next request
+	// instead of waiting out the TTL.
+	def string
+}
+
+func fingerprint(sub *storage.Subscription) string {
+	data, err := json.Marshal(sub)
+	if err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 10)
+	}
+	return string(data)
 }
 
 type Manager struct {
@@ -61,9 +76,10 @@ func (m *Manager) GetSubscription(id string, token string) ([]*model.ProxyNode, 
 	}
 
 	// Check cache
+	fp := fingerprint(sub)
 	m.cacheMu.RLock()
 	item, ok := m.cache[id]
-	if ok && time.Since(item.fetchedAt) < m.ttl {
+	if ok && item.def == fp && time.Since(item.fetchedAt) < m.ttl {
 		m.cacheMu.RUnlock()
 		return item.nodes, nil
 	}
@@ -84,11 +100,17 @@ func (m *Manager) GetSubscription(id string, token string) ([]*model.ProxyNode, 
 	// Apply pipeline operators
 	processed := m.applyPipeline(collected, sub.Pipeline)
 
-	// Update cache
+	// Update cache, dropping entries that are no longer reachable or usable.
 	m.cacheMu.Lock()
+	for key, it := range m.cache {
+		if time.Since(it.fetchedAt) > m.ttl {
+			delete(m.cache, key)
+		}
+	}
 	m.cache[id] = &cacheItem{
 		nodes:     processed,
 		fetchedAt: time.Now(),
+		def:       fp,
 	}
 	m.cacheMu.Unlock()
 
@@ -96,15 +118,17 @@ func (m *Manager) GetSubscription(id string, token string) ([]*model.ProxyNode, 
 }
 
 func (m *Manager) fetchSource(ctx context.Context, src string) ([]*model.ProxyNode, error) {
-	if len(src) >= 7 && (src[:7] == "http://" || src[:8] == "https://") {
+	switch {
+	case strings.HasPrefix(src, "http://"), strings.HasPrefix(src, "https://"):
 		return m.fetcher.FetchSubscription(ctx, src, "")
+	default:
+		// Inline payload: single URI, base64 blob, Clash YAML or sing-box JSON fragment.
+		nodes, err := parser.ParseSubscription([]byte(src))
+		if err == nil && len(nodes) > 0 {
+			return nodes, nil
+		}
+		return nil, fmt.Errorf("unrecognized source: %s", src)
 	}
-	// Try parsing raw URI directly
-	node, err := parser.ParseURI(src)
-	if err == nil && node != nil {
-		return []*model.ProxyNode{node}, nil
-	}
-	return nil, fmt.Errorf("unrecognized source: %s", src)
 }
 
 func (m *Manager) applyPipeline(nodes []*model.ProxyNode, steps []storage.PipelineStep) []*model.ProxyNode {
@@ -114,9 +138,11 @@ func (m *Manager) applyPipeline(nodes []*model.ProxyNode, steps []storage.Pipeli
 		case "rename":
 			current = pipeline.RegexRename(current, step.Pattern, step.Repl)
 		case "filter":
-			current = pipeline.Filter(current, step.Include, step.Exclude)
+			current = pipeline.Filter(current, step.Include, step.Exclude, step.Types...)
 		case "deduplicate":
 			current = pipeline.Deduplicate(current)
+		case "sort":
+			current = pipeline.Sort(current, step.By, step.Order)
 		case "decorate":
 			current = pipeline.Decorate(current, pipeline.DecoratorOptions{
 				Fingerprint: step.Fingerprint,
