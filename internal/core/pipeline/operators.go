@@ -1,8 +1,9 @@
 package pipeline
 
 import (
-	"fmt"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/arisvia/subrefine/internal/core/model"
@@ -23,8 +24,11 @@ func RegexRename(nodes []*model.ProxyNode, pattern, repl string) []*model.ProxyN
 	return out
 }
 
-// Filter retains nodes that match the include keyword/regex, or drops those that match exclude.
-func Filter(nodes []*model.ProxyNode, includePattern, excludePattern string) []*model.ProxyNode {
+// Filter retains nodes whose tag matches includePattern but not excludePattern,
+// and whose protocol is in types (empty, or nothing recognizable, = all protocols).
+// Protocol names accept the usual aliases (ss, hy2, wg, ...); unknown entries are
+// dropped rather than treated as a constraint, so a typo can never deliver zero nodes.
+func Filter(nodes []*model.ProxyNode, includePattern, excludePattern string, types ...string) []*model.ProxyNode {
 	var incRe, excRe *regexp.Regexp
 	if includePattern != "" {
 		incRe, _ = regexp.Compile(includePattern)
@@ -33,8 +37,23 @@ func Filter(nodes []*model.ProxyNode, includePattern, excludePattern string) []*
 		excRe, _ = regexp.Compile(excludePattern)
 	}
 
+	var allowed map[string]bool
+	for _, t := range types {
+		canon, ok := normalizeProtocol(t)
+		if !ok {
+			continue
+		}
+		if allowed == nil {
+			allowed = make(map[string]bool, len(types))
+		}
+		allowed[canon] = true
+	}
+
 	out := make([]*model.ProxyNode, 0, len(nodes))
 	for _, n := range nodes {
+		if allowed != nil && !allowed[n.Type] {
+			continue
+		}
 		if incRe != nil && !incRe.MatchString(n.Tag) {
 			continue
 		}
@@ -46,14 +65,62 @@ func Filter(nodes []*model.ProxyNode, includePattern, excludePattern string) []*
 	return out
 }
 
-// Deduplicate removes duplicate nodes based on server + port + protocol + credentials.
+// protoAliases maps the spellings operators and users actually type onto the
+// canonical model.Proto* values.
+var protoAliases = map[string]string{
+	"ss":          model.ProtoShadowsocks,
+	"shadowsocks": model.ProtoShadowsocks,
+	"vmess":       model.ProtoVMess,
+	"vless":       model.ProtoVLESS,
+	"tr":          model.ProtoTrojan,
+	"trojan":      model.ProtoTrojan,
+	"hy":          model.ProtoHysteria2,
+	"hy2":         model.ProtoHysteria2,
+	"hysteria":    model.ProtoHysteria2,
+	"hysteria2":   model.ProtoHysteria2,
+	"wg":          model.ProtoWireGuard,
+	"wireguard":   model.ProtoWireGuard,
+}
+
+func normalizeProtocol(s string) (string, bool) {
+	canon, ok := protoAliases[strings.TrimSpace(strings.ToLower(s))]
+	return canon, ok
+}
+
+// Sort orders nodes in place by tag (default) or protocol, ascending or descending.
+func Sort(nodes []*model.ProxyNode, by, order string) []*model.ProxyNode {
+	out := append([]*model.ProxyNode(nil), nodes...)
+	key := func(n *model.ProxyNode) string {
+		switch by {
+		case "protocol", "type":
+			return n.Type + "|" + n.Tag
+		default:
+			return n.Tag
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if strings.EqualFold(order, "desc") {
+			return key(out[i]) > key(out[j])
+		}
+		return key(out[i]) < key(out[j])
+	})
+	return out
+}
+
+// Deduplicate removes nodes that are the same endpoint *and* the same identity.
+// Key material is part of the signature: many Cloudflare WARP peers share
+// 162.159.192.1:2408 and differ only by keys, so omitting them would drop every
+// peer but the first.
 func Deduplicate(nodes []*model.ProxyNode) []*model.ProxyNode {
 	seen := make(map[string]bool, len(nodes))
 	out := make([]*model.ProxyNode, 0, len(nodes))
 
 	for _, n := range nodes {
-		sig := fmt.Sprintf("%s|%s|%d|%s|%s|%s|%s",
-			n.Type, n.Server, n.Port, n.UUID, n.Password, n.Method, n.Path)
+		sig := strings.Join([]string{
+			n.Type, n.Server, strconv.Itoa(n.Port),
+			n.UUID, n.Password, n.Method, n.Path,
+			n.PrivateKey, n.PeerPubKey, n.PreSharedKey, n.ObfsPass,
+		}, "|")
 		if seen[sig] {
 			continue
 		}
