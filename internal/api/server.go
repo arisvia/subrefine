@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/arisvia/subrefine/internal/config"
 	"github.com/arisvia/subrefine/internal/core/emitter"
 	"github.com/arisvia/subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/core/pipeline"
 	"github.com/arisvia/subrefine/internal/storage"
 )
 
@@ -24,6 +24,10 @@ type SubStorage interface {
 // SubManager is the interface for retrieving subscription nodes and verifying sub tokens.
 type SubManager interface {
 	GetSubscription(id string, token string) ([]*model.ProxyNode, error)
+	// Invalidate drops cached delivery results for a subscription, so a deleted
+	// subscription's nodes (which include credentials) are not held until the TTL
+	// lapses.
+	Invalidate(id string)
 }
 
 // Target formats
@@ -38,6 +42,7 @@ type Server struct {
 	subManager SubManager
 	storage    SubStorage
 	mux        *http.ServeMux
+	limiter    *AuthLimiter
 }
 
 func NewServer(cfg *config.Config, sm SubManager, st SubStorage) *Server {
@@ -46,6 +51,7 @@ func NewServer(cfg *config.Config, sm SubManager, st SubStorage) *Server {
 		subManager: sm,
 		storage:    st,
 		mux:        http.NewServeMux(),
+		limiter:    NewAuthLimiter(cfg != nil && cfg.TrustProxy),
 	}
 	s.registerRoutes()
 	return s
@@ -64,17 +70,24 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("DELETE /api/admin/subscriptions/{id}", s.adminAuthMiddleware(s.handleAdminDeleteSubscription))
 	s.mux.HandleFunc("GET /api/admin/subscriptions/{id}/nodes", s.adminAuthMiddleware(s.handleAdminPreviewNodes))
 
-	// Everything else is the embedded console (SPA fallback for client routes).
+	// Everything else is the embedded console; unknown paths are 404, never the shell.
 	s.mux.Handle("GET /", NewDashboardHandler(s.cfg.DashboardDir))
 }
 
 func (s *Server) adminAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if !auth.ValidateAdminToken(authHeader, s.cfg.AdminToken) {
+		key := s.limiter.clientKey(r)
+		if wait := s.limiter.retryAfter(key); wait > 0 {
+			w.Header().Set("Retry-After", retryAfterHeader(wait))
+			http.Error(w, `{"error":"too many failed attempts"}`, http.StatusTooManyRequests)
+			return
+		}
+		if !auth.ValidateAdminToken(r.Header.Get("Authorization"), s.cfg.AdminToken) {
+			s.limiter.recordFailure(key)
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
 		}
+		s.limiter.clear(key)
 		next(w, r)
 	}
 }
@@ -111,16 +124,34 @@ func (s *Server) handleAdminSaveSubscription(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var sub storage.Subscription
-	if err := json.NewDecoder(r.Body).Decode(&sub); err != nil || sub.ID == "" {
-		http.Error(w, `{"error":"invalid subscription body"}`, http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&sub); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid subscription body")
+		return
+	}
+	// Reject configuration that delivery would otherwise ignore, so a typo in
+	// the console cannot turn into a subscription that leaks hidden nodes.
+	if err := storage.ValidateID(sub.ID); err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := pipeline.ValidateSteps(sub.Pipeline); err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := s.storage.Save(&sub); err != nil {
-		http.Error(w, `{"error":"save failed"}`, http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "save failed: "+err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{"status": "ok", "sub": sub})
+}
+
+// writeJSONError reports a failure with a correctly escaped message, since
+// validation errors quote the operator's own input.
+func writeJSONError(w http.ResponseWriter, code int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 func (s *Server) handleAdminDeleteSubscription(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +165,9 @@ func (s *Server) handleAdminDeleteSubscription(w http.ResponseWriter, r *http.Re
 		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 		return
 	}
+	if s.subManager != nil {
+		s.subManager.Invalidate(id)
+	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
 }
@@ -146,17 +180,33 @@ func (s *Server) handleAdminPreviewNodes(w http.ResponseWriter, r *http.Request)
 		http.Error(w, `{"error":"subscription not found"}`, http.StatusNotFound)
 		return
 	}
+	if !sub.Enabled {
+		// Previews of a disabled subscription are a conflict, not a server
+		// failure; the overview flags them and moves on.
+		writeJSONError(w, http.StatusConflict, "subscription is disabled")
+		return
+	}
 
 	nodes, err := s.subManager.GetSubscription(id, sub.Token)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"failed to fetch nodes: %s"}`, err.Error()), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to fetch nodes: "+err.Error())
 		return
+	}
+
+	// uris is index-aligned with nodes: the shareable client link for each node,
+	// empty when that node cannot be encoded as a URI.
+	uris := make([]string, len(nodes))
+	for i, n := range nodes {
+		if uri, err := emitter.ToURI(n); err == nil {
+			uris[i] = uri
+		}
 	}
 
 	json.NewEncoder(w).Encode(map[string]any{
 		"id":    id,
 		"count": len(nodes),
 		"nodes": nodes,
+		"uris":  uris,
 	})
 }
 

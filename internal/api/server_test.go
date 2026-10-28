@@ -18,6 +18,7 @@ type mockSubManager struct {
 	expectedID    string
 	expectedToken string
 	nodes         []*model.ProxyNode
+	invalidated   []string
 }
 
 func (m *mockSubManager) GetSubscription(id string, token string) ([]*model.ProxyNode, error) {
@@ -25,6 +26,10 @@ func (m *mockSubManager) GetSubscription(id string, token string) ([]*model.Prox
 		return nil, errors.New("forbidden")
 	}
 	return m.nodes, nil
+}
+
+func (m *mockSubManager) Invalidate(id string) {
+	m.invalidated = append(m.invalidated, id)
 }
 
 func TestAPIServer(t *testing.T) {

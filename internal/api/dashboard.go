@@ -38,6 +38,7 @@ func newDashboardHandler(devDir string, embedded fs.FS) *DashboardHandler {
 
 func (d *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	addDashboardVary(w.Header())
+	setDashboardSecurity(w.Header())
 	name := dashboardName(r)
 
 	if d.devDir != "" && serveDashboardFile(w, r, os.DirFS(d.devDir), name) {
@@ -169,6 +170,25 @@ func addDashboardVary(h http.Header) {
 		}
 	}
 	h.Add("Vary", "Accept-Encoding")
+}
+
+// setDashboardSecurity pins the console to its own scripts. The admin bearer
+// token is kept in localStorage, so an injected script on this origin would
+// read it; 'self' without unsafe-inline or unsafe-eval is what makes that
+// storage choice defensible. Inline style attributes stay allowed because the
+// UI sets CSS custom properties per element. font-src also accepts data:
+// because @fontsource inlines some unicode-range subsets as base64 woff2;
+// refusing it silently dropped CJK font slices (font data cannot execute).
+func setDashboardSecurity(h http.Header) {
+	if h.Get("Content-Security-Policy") == "" {
+		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+	}
+	if h.Get("X-Content-Type-Options") == "" {
+		h.Set("X-Content-Type-Options", "nosniff")
+	}
+	if h.Get("Referrer-Policy") == "" {
+		h.Set("Referrer-Policy", "same-origin")
+	}
 }
 
 // Unspecified identity is a last resort unless *;q=0 excludes it.
