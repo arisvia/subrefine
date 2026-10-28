@@ -31,6 +31,12 @@ data/
 *.db
 *.log
 
+# localtest run artifacts (harness scripts and fixtures stay tracked)
+localtest/data*/
+localtest/*.md5
+localtest/*.exe
+localtest/bin/
+
 # IDE & OS
 .DS_Store
 Thumbs.db

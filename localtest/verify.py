@@ -121,6 +121,26 @@ check("delete unknown id 404", st == 404, str(st))
 st, _, _ = req("/api/admin/subscriptions/ghost/nodes", token=ADMIN)
 check("preview unknown id 404", st == 404, str(st))
 
+# Save-time contract: configuration delivery would silently ignore must be
+# refused with the server's explanation, which the console surfaces verbatim.
+st, bd, _ = save(mksub("badre", ["ss://YWVzLTI1Ni1nY206cDpwQDEuMi4zLjQ6ODM4OCAjTm9kZQ"], [
+    {"type": "rename", "pattern": "([", "repl": "x"}]))
+check("save rejects bad regex (400)", st == 400 and "invalid pattern" in bd, f"{st} {bd[:120]}")
+st, bd, _ = save(mksub("badop", ["ss://YWVzLTI1Ni1nY206cDpwQDEuMi4zLjQ6ODM4OCAjTm9kZQ"], [{"type": "quantum"}]))
+check("save rejects unknown operator (400)", st == 400 and "unknown operator" in bd, f"{st} {bd[:120]}")
+st, bd, _ = save(mksub("bad types!", ["ss://YWVzLTI1Ni1nY206cDpwQDEuMi4zLjQ6ODM4OCAjTm9kZQ"], []))
+check("save rejects unsafe id (400)", st == 400 and "must match" in bd, f"{st} {bd[:120]}")
+
+# A deleted subscription must 404 on delivery immediately, not serve cached
+# nodes until the TTL lapses.
+st, _, _ = save(mksub("gone-soon", ["ss://YWVzLTI1Ni1nY206cDpwQDEuMi4zLjQ6ODM4OCAjTm9kZQ"], []))
+st, _, _ = req("/s/gone-soon?token=subtok-gone-soon")
+check("new sub delivers before delete", st == 200, str(st))
+st, _, _ = req("/api/admin/subscriptions/gone-soon", token=ADMIN, method="DELETE")
+check("delete gone-soon 200", st == 200, str(st))
+st, _, _ = req("/s/gone-soon?token=subtok-gone-soon")
+check("deleted sub delivery 403", st == 403, str(st))
+
 # ------------------------------------------------- subscription format ingest
 CASES = {
     "uri-plain": (f"{FIXTURE}/uri_plain.txt", 7),
