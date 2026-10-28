@@ -33,6 +33,22 @@ jobs:
         working-directory: webui
         run: npm run test
 
+      # The tracked webui/dist is what Node-less `go build` embeds, so every
+      # asset the committed shell references must exist and carry the admin
+      # API. Structural check — byte-for-byte rebuild determinism is not a
+      # promise cross-platform toolchains can keep.
+      - name: Committed Dist Integrity
+        working-directory: webui
+        run: |
+          test -f dist/index.html || { echo "dist/index.html missing"; exit 1; }
+          for A in $(grep -o '/assets/[^"]*' dist/index.html | sort -u); do
+            test -f "dist$A" || { echo "committed shell references missing asset $A"; exit 1; }
+          done
+          ENTRY=$(sed -n 's|.*script type="module"[^>]*src="\(\/assets\/[^"]*\.js\)".*|\1|p' dist/index.html | head -1)
+          [ -n "$ENTRY" ] || { echo "no entry bundle in shell"; exit 1; }
+          grep -q '/api/admin/subscriptions' "dist$ENTRY" || { echo "entry bundle lacks admin API path"; exit 1; }
+          grep -q 'node_modules' dist/index.html && { echo "shell references node_modules path"; exit 1; } || true
+
       - name: Build Console Bundle
         working-directory: webui
         run: npm run build
@@ -56,8 +72,12 @@ jobs:
         run: go test -race ./...
 
       - name: Smoke Build Binary
+        # The binary fail-closes without an admin token; the smoke server needs one.
+        env:
+          SUBREFINE_ADMIN_TOKEN: ci-smoke-token
         run: |
           CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/arisvia/subrefine/internal/api.Version=ci-smoke" -o subrefine ./cmd/subrefine/
+          ./subrefine -v | grep -qx "subrefine ci-smoke" || { echo "version not stamped"; exit 1; }
           ./subrefine -host 127.0.0.1 -port 29999 &
           PID=$!
           sleep 2
