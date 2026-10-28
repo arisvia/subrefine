@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -133,6 +134,24 @@ func TestAPIServer(t *testing.T) {
 		}
 		if !strings.Contains(string(decoded), "ss://") {
 			t.Fatalf("expected decoded content to contain ss://, got %s", string(decoded))
+		}
+	})
+
+	t.Run("Version Is Reported", func(t *testing.T) {
+		api.Version = "v9.9.9-test"
+		defer func() { api.Version = "dev" }()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/admin/info", nil)
+		req.Header.Set("Authorization", "Bearer my_admin_secret")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("bad json: %v (%s)", err, rec.Body.String())
+		}
+		if body["version"] != "v9.9.9-test" {
+			t.Fatalf("admin info must report the stamped build version, got %v", body["version"])
 		}
 	})
 

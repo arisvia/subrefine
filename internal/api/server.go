@@ -97,7 +97,7 @@ func (s *Server) handleAdminInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"status":  "ok",
-		"version": "1.0.0",
+		"version": Version,
 		"host":    s.cfg.Host,
 		"port":    s.cfg.Port,
 	})

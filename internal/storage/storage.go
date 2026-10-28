@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 var (
@@ -14,13 +15,16 @@ var (
 )
 
 type PipelineStep struct {
-	Type        string `json:"type"` // rename, filter, deduplicate, decorate
-	Pattern     string `json:"pattern,omitempty"`
-	Repl        string `json:"repl,omitempty"`
-	Include     string `json:"include,omitempty"`
-	Exclude     string `json:"exclude,omitempty"`
-	Fingerprint string `json:"fingerprint,omitempty"`
-	Detour      string `json:"detour,omitempty"`
+	Type        string   `json:"type"` // rename, filter, deduplicate, decorate, sort
+	Pattern     string   `json:"pattern,omitempty"`
+	Repl        string   `json:"repl,omitempty"`
+	Include     string   `json:"include,omitempty"`
+	Exclude     string   `json:"exclude,omitempty"`
+	Types       []string `json:"types,omitempty"`       // filter: protocol allow-list
+	Fingerprint string   `json:"fingerprint,omitempty"` // decorate
+	Detour      string   `json:"detour,omitempty"`      // decorate
+	By          string   `json:"by,omitempty"`          // sort: tag | protocol
+	Order       string   `json:"order,omitempty"`       // sort: asc | desc
 }
 
 type Subscription struct {
@@ -122,6 +126,16 @@ func (s *Store) List() []*Subscription {
 func (s *Store) Save(sub *Subscription) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	now := time.Now().Unix()
+	if sub.CreatedAt == 0 {
+		if old, ok := s.subs[sub.ID]; ok && old.CreatedAt != 0 {
+			sub.CreatedAt = old.CreatedAt
+		} else {
+			sub.CreatedAt = now
+		}
+	}
+	sub.UpdatedAt = now
 
 	s.subs[sub.ID] = sub
 	return s.save()

@@ -30,7 +30,7 @@ jobs:
         run: |
           mkdir -p dist
           VERSION="${GITHUB_REF_NAME}"
-          LDFLAGS="-s -w -X main.version=${VERSION}"
+          LDFLAGS="-s -w -X github.com/arisvia/subrefine/internal/api.Version=${VERSION}"
 
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/subrefine-linux-amd64 ./cmd/subrefine
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/subrefine-linux-arm64 ./cmd/subrefine

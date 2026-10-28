@@ -34,7 +34,7 @@ jobs:
 
       - name: Smoke Build Binary
         run: |
-          CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=ci-smoke" -o subrefine ./cmd/subrefine/
+          CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/arisvia/subrefine/internal/api.Version=ci-smoke" -o subrefine ./cmd/subrefine/
           ./subrefine -host 127.0.0.1 -port 29999 &
           PID=$!
           sleep 2
