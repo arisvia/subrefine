@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -124,6 +125,10 @@ func (s *Store) List() []*Subscription {
 }
 
 func (s *Store) Save(sub *Subscription) error {
+	if err := ValidateID(sub.ID); err != nil {
+		return err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -139,6 +144,22 @@ func (s *Store) Save(sub *Subscription) error {
 
 	s.subs[sub.ID] = sub
 	return s.save()
+}
+
+// ValidateID keeps an id usable in a URL path segment and inside the data file.
+// It mirrors the console's ID_PATTERN (webui SubscriptionEditor): ids may only
+// use unambiguous ASCII. Store.load bypasses Save, so pre-existing non-matching
+// ids in an old data file still open; new or edited ones must conform.
+var idPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+func ValidateID(id string) error {
+	if id == "" {
+		return errors.New("subscription id is required")
+	}
+	if !idPattern.MatchString(id) {
+		return fmt.Errorf("subscription id %q must match [A-Za-z0-9_-]{1,64}", id)
+	}
+	return nil
 }
 
 func (s *Store) Delete(id string) error {

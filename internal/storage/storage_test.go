@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,5 +60,26 @@ func TestSaveStampsTimestamps(t *testing.T) {
 	list := reopened.List()
 	if len(list) != 1 || list[0].ID != "a" || list[0].CreatedAt != first {
 		t.Fatalf("reload mismatch: %+v", list)
+	}
+}
+
+// An id doubles as a URL path segment (/s/{id}) and a map key inside the data
+// file, so traversal and control characters must be refused before either.
+func TestSaveRejectsUnsafeIDs(t *testing.T) {
+	store, err := storage.New(t.TempDir())
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	for _, bad := range []string{"", ".", "..", "a/b", `a\b`, "a\nb", "a\x00b", "hk#1", "订阅 A", "a b", "x.64", strings.Repeat("x", 65)} {
+		if err := store.Save(&storage.Subscription{ID: bad, Token: "t", Enabled: true}); err == nil {
+			t.Fatalf("Save(%q) = nil, want rejection", bad)
+		}
+	}
+
+	for _, good := range []string{"hk-01", "a_b", "Demo", strings.Repeat("y", 64)} {
+		if err := store.Save(&storage.Subscription{ID: good, Token: "t", Enabled: true}); err != nil {
+			t.Fatalf("Save(%q) = %v, want acceptance", good, err)
+		}
 	}
 }
