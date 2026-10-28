@@ -155,7 +155,7 @@ func TestAPIServer(t *testing.T) {
 		}
 	})
 
-	t.Run("WebUI Index Route", func(t *testing.T) {
+	t.Run("Console Shell Is Mounted At Root", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -163,8 +163,13 @@ func TestAPIServer(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d", rec.Code)
 		}
-		if !strings.Contains(rec.Body.String(), "subrefine 控制台") {
-			t.Fatalf("expected embedded html title, got %s", rec.Body.String())
+		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+			t.Fatalf("expected an HTML shell, got Content-Type %q", ct)
+		}
+		// The shell must never be cached, or a redeployed bundle would only
+		// reach clients that dropped their cache.
+		if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "no-store") {
+			t.Fatalf("expected no-store shell, got Cache-Control %q", cc)
 		}
 	})
 }

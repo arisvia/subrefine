@@ -7,10 +7,11 @@ import (
 )
 
 type Config struct {
-	Host       string `json:"host" yaml:"host"`
-	Port       int    `json:"port" yaml:"port"`
-	AdminToken string `json:"admin_token" yaml:"admin_token"`
-	DataDir    string `json:"data_dir" yaml:"data_dir"`
+	Host         string `json:"host" yaml:"host"`
+	Port         int    `json:"port" yaml:"port"`
+	AdminToken   string `json:"admin_token" yaml:"admin_token"`
+	DataDir      string `json:"data_dir" yaml:"data_dir"`
+	DashboardDir string `json:"dashboard_dir" yaml:"dashboard_dir"`
 }
 
 func DefaultConfig() *Config {
@@ -40,6 +41,9 @@ func LoadFromEnv(cfg *Config) {
 	}
 	if dataDir := os.Getenv("SUBREFINE_DATA_DIR"); dataDir != "" {
 		cfg.DataDir = dataDir
+	}
+	if dir := os.Getenv("SUBREFINE_DASHBOARD"); dir != "" {
+		cfg.DashboardDir = dir
 	}
 }
 

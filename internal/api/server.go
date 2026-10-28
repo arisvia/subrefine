@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"strings"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/arisvia/subrefine/internal/core/emitter"
 	"github.com/arisvia/subrefine/internal/core/model"
 	"github.com/arisvia/subrefine/internal/storage"
-	"github.com/arisvia/subrefine/webui"
 )
 
 type SubStorage interface {
@@ -66,14 +64,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("DELETE /api/admin/subscriptions/{id}", s.adminAuthMiddleware(s.handleAdminDeleteSubscription))
 	s.mux.HandleFunc("GET /api/admin/subscriptions/{id}/nodes", s.adminAuthMiddleware(s.handleAdminPreviewNodes))
 
-	// Embedded WebUI handler
-	distFS, err := fs.Sub(webui.FS, "dist")
-	if err == nil {
-		fileServer := http.FileServer(http.FS(distFS))
-		s.mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-			fileServer.ServeHTTP(w, r)
-		})
-	}
+	// Everything else is the embedded console (SPA fallback for client routes).
+	s.mux.Handle("GET /", NewDashboardHandler(s.cfg.DashboardDir))
 }
 
 func (s *Server) adminAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
