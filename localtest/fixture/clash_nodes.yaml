@@ -1,0 +1,38 @@
+proxies:
+- name: CL-JP-10
+  type: ss
+  server: 198.51.100.10
+  port: 8443
+  cipher: aes-256-gcm
+  password: ss02
+- name: CL-HK-11
+  type: trojan
+  server: 203.0.113.99
+  port: 443
+  password: trpass001
+  sni: hk.example.com
+  network: ws
+  ws-opts:
+    path: /trojan
+    headers:
+      Host: hk.example.com
+- name: CL-US-12
+  type: vless
+  server: 203.0.113.55
+  port: 443
+  uuid: b831b1a6-2f13-4c6d-9b2e-8f0a1c2d3e4f
+  flow: xtls-rprx-vision
+  tls: true
+  servername: www.microsoft.com
+  client-fingerprint: chrome
+  reality-opts:
+    public-key: SbxgTPAIcKg2K4LTBfrIGQfCNbQLdGOGNwOrWPykWlU
+    short-id: 6ba818e7
+- name: CL-WG-13
+  type: wireguard
+  server: 198.51.100.200
+  port: 51820
+  private-key: A@fake
+  public-key: B@fake
+  ip: 10.0.0.5/32
+  mtu: 1420
