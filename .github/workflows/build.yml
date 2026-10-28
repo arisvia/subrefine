@@ -14,6 +14,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: webui/package-lock.json
+
+      - name: Install Console Dependencies
+        working-directory: webui
+        run: npm ci
+
+      - name: Console Typecheck
+        working-directory: webui
+        run: npm run typecheck
+
+      - name: Console Tests
+        working-directory: webui
+        run: npm run test
+
+      - name: Build Console Bundle
+        working-directory: webui
+        run: npm run build
+
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
@@ -39,4 +62,11 @@ jobs:
           PID=$!
           sleep 2
           curl -fsS http://127.0.0.1:29999/healthz || (kill -9 $PID && exit 1)
+          # The freshly built webui/dist must be embedded and served, with the
+          # hashed chunks negotiable from their precompressed sidecars.
+          SHELL_HTML=$(curl -fsS http://127.0.0.1:29999/)
+          echo "$SHELL_HTML" | grep -q 'id="root"' || { echo "console shell not embedded"; kill -9 $PID; exit 1; }
+          ASSET=$(echo "$SHELL_HTML" | sed -n 's|.*src="\(\/assets\/[^"]*\.js\)".*|\1|p' | head -1)
+          [ -n "$ASSET" ] || { echo "shell references no bundle"; kill -9 $PID; exit 1; }
+          curl -fsS -o /dev/null -H 'Accept-Encoding: br, gzip' "http://127.0.0.1:29999$ASSET" || { echo "$ASSET unavailable"; kill -9 $PID; exit 1; }
           kill -9 $PID
