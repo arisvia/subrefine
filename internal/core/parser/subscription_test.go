@@ -98,8 +98,10 @@ func TestSingboxRoundTrip(t *testing.T) {
 		t.Fatalf("ParseSingbox failed: %v", err)
 	}
 
-	if len(parsed) != len(orig) {
-		t.Fatalf("expected %d nodes, got %d", len(orig), len(parsed))
+	// The sing-box target drops WireGuard (removed as an outbound in
+	// sing-box 1.13.0), so the round trip returns the other five nodes.
+	if len(parsed) != len(orig)-1 {
+		t.Fatalf("expected %d nodes (WG excluded), got %d", len(orig)-1, len(parsed))
 	}
 
 	if parsed[0].Tag != "SS-Test" || parsed[0].Method != "aes-128-gcm" {
@@ -113,6 +115,23 @@ func TestSingboxRoundTrip(t *testing.T) {
 	}
 	if parsed[3].Tag != "Hy2-Test" || parsed[3].UpMbps != 50 {
 		t.Fatalf("Hy2 mismatch")
+	}
+
+	// A modern config that carries WG in endpoints[] still ingests: the node
+	// cannot go back out through the sing-box target but is servable to
+	// clash and uri clients.
+	modern := []byte(`{"outbounds":[{"type":"direct","tag":"d"}],"endpoints":[` +
+		`{"type":"wireguard","tag":"WG-Node","address":["10.0.0.2/32"],"private_key":"fakePriv","mtu":1420,` +
+		`"peers":[{"address":"1.2.3.4","port":51820,"public_key":"fakePub","reserved":[1,2,3]}]}]}`)
+	nodes, err := parser.ParseSingbox(modern)
+	if err != nil {
+		t.Fatalf("ParseSingbox(modern): %v", err)
+	}
+	if len(nodes) != 1 || nodes[0].Tag != "WG-Node" || nodes[0].Type != model.ProtoWireGuard ||
+		nodes[0].Server != "1.2.3.4" || nodes[0].Port != 51820 ||
+		nodes[0].PeerPubKey != "fakePub" || nodes[0].PrivateKey != "fakePriv" ||
+		nodes[0].MTU != 1420 || len(nodes[0].LocalAddr) != 1 || nodes[0].LocalAddr[0] != "10.0.0.2/32" {
+		t.Fatalf("wireguard endpoint not ingested: %+v", nodes)
 	}
 }
 
@@ -180,17 +199,30 @@ func TestParseSubscriptionDetectsEveryEnvelope(t *testing.T) {
 		"uri list base64 no newline": []byte(base64.StdEncoding.EncodeToString([]byte(strings.TrimRight(plainURIs, "\n")))),
 	}
 
+	// The sing-box target legitimately drops WireGuard (no such outbound
+	// since 1.13.0), so its round-trip expects the WG-free node list.
+	singboxOrig := make([]*model.ProxyNode, 0, len(orig))
+	for _, n := range orig {
+		if n.Type != model.ProtoWireGuard {
+			singboxOrig = append(singboxOrig, n)
+		}
+	}
+
 	for name, payload := range cases {
 		t.Run(name, func(t *testing.T) {
+			want := orig
+			if strings.HasPrefix(name, "sing-box") {
+				want = singboxOrig
+			}
 			nodes, err := parser.ParseSubscription(payload)
 			if err != nil {
 				t.Fatalf("ParseSubscription error: %v", err)
 			}
-			if len(nodes) != len(orig) {
-				t.Fatalf("expected %d nodes, got %d", len(orig), len(nodes))
+			if len(nodes) != len(want) {
+				t.Fatalf("expected %d nodes, got %d", len(want), len(nodes))
 			}
 			for i, n := range nodes {
-				if n.Tag != orig[i].Tag || n.Type != orig[i].Type || n.Server != orig[i].Server || n.Port != orig[i].Port {
+				if n.Tag != want[i].Tag || n.Type != want[i].Type || n.Server != want[i].Server || n.Port != want[i].Port {
 					t.Fatalf("node %d mismatch: got %s/%s/%s:%d", i, n.Tag, n.Type, n.Server, n.Port)
 				}
 			}

@@ -3,7 +3,8 @@
 单二进制、低内存的代理订阅聚合与分发服务：用 Go 重写 [Sub-Store](https://github.com/sub-store-org/Sub-Store) 的核心能力，并补上它缺失的管理鉴权。
 
 - 解析并归一化 SS / SS2022 / VMess / VLESS (Reality·Vision·gRPC·WS) / Trojan / Hysteria2 / WireGuard
-- 按客户端下发对应格式：sing-box 1.15 JSON、Clash.Meta (Mihomo) YAML、Base64 URI
+- 按客户端下发对应格式：sing-box JSON、Clash.Meta (Mihomo) YAML、Base64 URI
+- WireGuard 说明：sing-box 1.13.0 起移除了 wireguard 出站（新式 `endpoints` 是启动隧道，非按节点可选代理），因此 **sing-box 格式不携带 WG 节点**，并在响应头 `X-Subrefine-Skipped: wireguard=N` 与服务日志中显式声明；Clash.Meta 与 URI 格式仍完整下发 WG。产物均以 sing-box 1.14.4 / Mihomo v1.19.33 的官方解析器实测通过。
 - 管线算子：过滤、正则重命名、特征去重、属性修饰（uTLS 指纹 / detour）、排序
 - 内嵌 Web 控制台（SolidJS + Tailwind，`//go:embed` 打进同一个二进制）
 - 双层鉴权：管理端 Bearer 令牌 + 每条订阅独立 token，均为恒定时间比较

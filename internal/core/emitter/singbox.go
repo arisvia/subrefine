@@ -3,6 +3,7 @@ package emitter
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/arisvia/subrefine/internal/core/model"
 )
 
@@ -183,24 +184,11 @@ func ToSingboxOutbound(n *model.ProxyNode) (map[string]any, error) {
 		}
 
 	case model.ProtoWireGuard:
-		if n.PrivateKey != "" {
-			out["private_key"] = n.PrivateKey
-		}
-		if n.PeerPubKey != "" {
-			out["peer_public_key"] = n.PeerPubKey
-		}
-		if n.PreSharedKey != "" {
-			out["pre_shared_key"] = n.PreSharedKey
-		}
-		if len(n.LocalAddr) > 0 {
-			out["local_address"] = n.LocalAddr
-		}
-		if n.MTU > 0 {
-			out["mtu"] = n.MTU
-		}
-		if len(n.Reserved) > 0 {
-			out["reserved"] = n.Reserved
-		}
+		// sing-box 1.13.0 removed the wireguard outbound and its endpoint
+		// replacement is a startup tunnel, not a per-node proxy, so WG cannot
+		// be a selectable outbound in any current sing-box. The delivery
+		// handler announces the skip; clash and uri targets still carry WG.
+		return nil, fmt.Errorf("wireguard is not a sing-box outbound since 1.13.0")
 
 	default:
 		return nil, fmt.Errorf("unsupported sing-box outbound type: %s", n.Type)
@@ -209,7 +197,22 @@ func ToSingboxOutbound(n *model.ProxyNode) (map[string]any, error) {
 	return out, nil
 }
 
+// SingboxSkipped lists nodes the sing-box target deliberately drops:
+// WireGuard has been an invalid outbound since sing-box 1.13.0, and an
+// undeliverable node must be announced, never silently vanished.
+func SingboxSkipped(nodes []*model.ProxyNode) []string {
+	var tags []string
+	for _, n := range nodes {
+		if n != nil && n.Type == model.ProtoWireGuard {
+			tags = append(tags, n.Tag)
+		}
+	}
+	return tags
+}
+
 // ToSingboxJSON serializes a list of ProxyNodes into a sing-box config JSON.
+// Nodes the target cannot express (WireGuard since sing-box 1.13.0) are left
+// out; callers announce that through SingboxSkipped.
 func ToSingboxJSON(nodes []*model.ProxyNode) ([]byte, error) {
 	outbounds := make([]map[string]any, 0, len(nodes))
 	for _, n := range nodes {

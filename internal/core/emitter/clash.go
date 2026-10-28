@@ -179,6 +179,19 @@ func ToClashYAML(nodes []*model.ProxyNode) ([]byte, error) {
 		}
 	}
 
+	// A subscription filtered to zero nodes must still be a loadable config:
+	// mihomo rejects a url-test group with no proxies ("use or proxies
+	// missing"), so fall back to a bare DIRECT rule set instead of emitting
+	// empty AUTO/PROXIES groups.
+	if len(names) == 0 {
+		doc := map[string]any{
+			"proxies":      []map[string]any{},
+			"proxy-groups": []map[string]any{},
+			"rules":        []string{"MATCH,DIRECT"},
+		}
+		return yaml.Marshal(doc)
+	}
+
 	// Basic group structure
 	groups := []map[string]any{
 		{

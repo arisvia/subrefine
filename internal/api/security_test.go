@@ -10,6 +10,7 @@ import (
 
 	"github.com/arisvia/subrefine/internal/api"
 	"github.com/arisvia/subrefine/internal/config"
+	"github.com/arisvia/subrefine/internal/core/model"
 	"github.com/arisvia/subrefine/internal/storage"
 )
 
@@ -252,6 +253,58 @@ func (f flakyStore) Delete(id string) error {
 		return errors.New("sync to disk failed")
 	}
 	return f.Store.Delete(id)
+}
+
+// The sing-box target drops WG (no such outbound since sing-box 1.13.0) but
+// must announce it - a silently vanished node is the anti-pattern this
+// project outlawed everywhere else.
+func TestSingboxDeliveryAnnouncesWireGuardSkip(t *testing.T) {
+	nodes := []*model.ProxyNode{
+		{Tag: "WG-1", Type: model.ProtoWireGuard, Server: "1.2.3.4", Port: 51820,
+			PrivateKey: "a", PeerPubKey: "b", LocalAddr: []string{"10.0.0.2/32"}},
+		{Tag: "SS-1", Type: model.ProtoShadowsocks, Server: "5.6.7.8", Port: 8388,
+			Method: "aes-128-gcm", Password: "p"},
+	}
+	mock := &mockSubManager{expectedID: "sub1", expectedToken: "tok123", nodes: nodes}
+	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "x"}
+	handler := api.NewServer(cfg, mock, nil).Handler()
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=sing-box", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("X-Subrefine-Skipped"); got != "wireguard=1" {
+		t.Fatalf("X-Subrefine-Skipped = %q, want wireguard=1", got)
+	}
+	var doc struct {
+		Outbounds []map[string]any `json:"outbounds"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
+		t.Fatalf("delivery is not valid JSON: %v", err)
+	}
+	if len(doc.Outbounds) != 1 || doc.Outbounds[0]["tag"] != "SS-1" {
+		t.Fatalf("outbounds = %v, want only SS-1", doc.Outbounds)
+	}
+
+	// Clash keeps WG: the same list must arrive intact there.
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=clash", nil))
+	if rec2.Code != http.StatusOK || !strings.Contains(rec2.Body.String(), "WG-1") {
+		t.Fatalf("clash target lost WG: %d %s", rec2.Code, rec2.Body.String())
+	}
+
+	// Nothing dropped, nothing announced: the header must stay absent for an
+	// all-eligible node list.
+	mock.nodes = nodes[1:]
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=sing-box", nil))
+	if got, ok := rec3.Header()["X-Subrefine-Skipped"]; ok || (len(got) == 1 && got[0] == "") {
+		t.Fatalf("header present for a complete delivery: %v", got)
+	}
+	if !strings.Contains(rec3.Body.String(), "SS-1") {
+		t.Fatalf("wg-free delivery lost the SS node: %s", rec3.Body.String())
+	}
 }
 
 // The console keeps the admin bearer token in localStorage, so shipped scripts

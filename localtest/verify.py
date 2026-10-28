@@ -176,7 +176,7 @@ check("vmess ws+tls parsed from uri", vm.get("network") == "ws" and vm.get("path
 st, d = preview("ing-clash-yaml")
 wg = next((n for n in d["nodes"] if n["type"] == "wireguard"), {})
 check("clash wireguard parsed (key/ip/mtu)",
-      wg.get("peer_public_key") == "B@fake" and wg.get("local_addr") == ["10.0.0.5/32"] and wg.get("mtu") == 1420,
+      wg.get("peer_public_key") == "hB3nQ7sV0xZ2cD5fG8jK1mN4pR7tW9yA2eI5oU8wY0A=" and wg.get("local_addr") == ["10.0.0.5/32"] and wg.get("mtu") == 1420,
       json.dumps(wg))
 
 st, d = preview("ing-singbox-json")
@@ -262,7 +262,7 @@ check("sing-box content-type json", "application/json" in hdr.get("Content-Type"
 st, bd, hdr = req("/s/ing-clash-yaml?token=subtok-ing-clash-yaml&target=clash")
 check("target=clash emits proxies + proxy-groups",
       st == 200 and "proxies:" in bd and "proxy-groups:" in bd and "url-test" in bd, f"{st} {bd[:160]}")
-check("clash keeps wireguard proxy", st == 200 and "type: wireguard" in bd and "public-key: B@fake" in bd, bd[:300])
+check("clash keeps wireguard proxy", st == 200 and "type: wireguard" in bd and "public-key: hB3nQ7sV0xZ2cD5fG8jK1mN4pR7tW9yA2eI5oU8wY0A=" in bd, bd[:300])
 check("clash content-type yaml", "yaml" in hdr.get("Content-Type", ""), hdr.get("Content-Type", ""))
 
 st, bd, _ = req("/s/pipe1?token=subtok-pipe1&target=uri")

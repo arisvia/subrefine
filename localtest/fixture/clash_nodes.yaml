@@ -32,7 +32,7 @@ proxies:
   type: wireguard
   server: 198.51.100.200
   port: 51820
-  private-key: A@fake
-  public-key: B@fake
+  private-key: wA9E3J5UwM3N0mU2Q2nD1K7pS8vT4xR6bY9cE0fGhIk=
+  public-key: hB3nQ7sV0xZ2cD5fG8jK1mN4pR7tW9yA2eI5oU8wY0A=
   ip: 10.0.0.5/32
   mtu: 1420

@@ -4,7 +4,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/arisvia/subrefine/internal/auth"
@@ -266,6 +268,10 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	switch target {
 	case TargetSingbox:
+		if skipped := emitter.SingboxSkipped(nodes); len(skipped) > 0 {
+			w.Header().Set("X-Subrefine-Skipped", "wireguard="+strconv.Itoa(len(skipped)))
+			log.Printf("[subrefine] %s: sing-box target dropped %d wireguard node(s) (no wireguard outbound since sing-box 1.13); clash and uri targets still carry them", subID, len(skipped))
+		}
 		data, err := emitter.ToSingboxJSON(nodes)
 		if err != nil {
 			http.Error(w, `{"error":"generate singbox config failed"}`, http.StatusInternalServerError)

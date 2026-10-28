@@ -10,6 +10,7 @@ import (
 
 type singboxRoot struct {
 	Outbounds []json.RawMessage `json:"outbounds"`
+	Endpoints []json.RawMessage `json:"endpoints"`
 }
 
 type singboxHeader struct {
@@ -51,7 +52,59 @@ func ParseSingbox(data []byte) ([]*model.ProxyNode, error) {
 		}
 	}
 
+	// sing-box 1.13.0 moved WireGuard from outbounds to endpoints[]: a
+	// startup tunnel with peers. Those nodes cannot be re-delivered through
+	// the sing-box target (see emitter.SingboxSkipped) but are real proxies
+	// for clash and uri clients, so ingest them.
+	for _, raw := range root.Endpoints {
+		node, ok := wireGuardEndpointNode(raw)
+		if ok {
+			nodes = append(nodes, node)
+		}
+	}
+
 	return nodes, nil
+}
+
+// wireGuardEndpointNode rebuilds a ProxyNode from a modern
+// endpoints[] wireguard entry: our single-peer model maps peers[0] as the
+// upstream and the endpoint's own fields as the interface.
+func wireGuardEndpointNode(raw []byte) (*model.ProxyNode, bool) {
+	var ep struct {
+		Type       string   `json:"type"`
+		Tag        string   `json:"tag"`
+		Address    []string `json:"address"`
+		PrivateKey string   `json:"private_key"`
+		MTU        int      `json:"mtu"`
+		Peers      []struct {
+			Address      string  `json:"address"`
+			Port         int     `json:"port"`
+			PublicKey    string  `json:"public_key"`
+			PreSharedKey string  `json:"pre_shared_key"`
+			Reserved     []uint8 `json:"reserved"`
+		} `json:"peers"`
+	}
+	if err := json.Unmarshal(raw, &ep); err != nil || ep.Type != "wireguard" || len(ep.Peers) == 0 {
+		return nil, false
+	}
+	peer := ep.Peers[0]
+	tag := ep.Tag
+	if tag == "" {
+		tag = peer.Address
+	}
+
+	return &model.ProxyNode{
+		Tag:          tag,
+		Type:         model.ProtoWireGuard,
+		Server:       peer.Address,
+		Port:         peer.Port,
+		PrivateKey:   ep.PrivateKey,
+		PeerPubKey:   peer.PublicKey,
+		PreSharedKey: peer.PreSharedKey,
+		LocalAddr:    ep.Address,
+		MTU:          ep.MTU,
+		Reserved:     peer.Reserved,
+	}, true
 }
 
 func parseSingboxOutbound(proto string, raw []byte) (*model.ProxyNode, error) {
