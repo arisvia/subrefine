@@ -1,7 +1,6 @@
 /* Vendored from cyrene-gateway webui (src/styles/app.css) — shared SolidJS +
    Tailwind v4 design system. Keep token/structure changes upstream-compatible. */
 @import 'tailwindcss';
-@import '@fontsource-variable/noto-sans-sc/index.css';
 @custom-variant dark (&:where(html:not(.light), html:not(.light) *));
 
 @font-face {
@@ -22,8 +21,8 @@
 
 @layer base {
   :root {
-    --font: 'Inter Variable', 'Noto Sans SC Variable', sans-serif;
-    --app-mono: 'JetBrains Mono Variable', 'Noto Sans SC Variable', monospace;
+    --font: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+    --app-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
     --brand-mint: hsl(172.46 66.01% 50.39%);
     --brand-cyan: hsl(188.74 94.50% 42.75%);
     --brand-indigo: hsl(238.73 83.53% 66.67%);

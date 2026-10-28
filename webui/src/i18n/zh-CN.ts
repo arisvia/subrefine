@@ -100,7 +100,7 @@ export const zhCN = {
     protocols: '协议分布',
     serviceInfo: '服务信息',
     listenAddr: '监听地址',
-    runtimeHint: '常驻内存 ~17MB（活跃堆 ~1MB）',
+    runtimeHint: '常驻内存 ~15MB（活跃堆 ~1MB）',
     quickStart: '快速开始',
     quickStartDesc: '创建第一个订阅，把多个机场源聚合成一条客户端链接。',
     recentSubs: '最近编辑',

@@ -102,7 +102,7 @@ export const enUS: TranslationDict = {
     protocols: 'Protocol mix',
     serviceInfo: 'Service',
     listenAddr: 'Listening on',
-    runtimeHint: 'Resident ~17MB (live heap ~1MB)',
+    runtimeHint: 'Resident ~15MB (live heap ~1MB)',
     quickStart: 'Quick start',
     quickStartDesc: 'Create your first subscription and merge several airport feeds into one client link.',
     recentSubs: 'Recently edited',
