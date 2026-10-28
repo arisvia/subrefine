@@ -2,8 +2,12 @@ package service_test
 
 import (
 	"encoding/base64"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -196,5 +200,109 @@ func TestEditTakesEffectImmediately(t *testing.T) {
 	}
 	if &cached[0] != &nodes[0] {
 		t.Fatal("expected cache hit to return the previously computed slice")
+	}
+}
+
+// Several clients arriving together as a cache entry lapses must produce one
+// upstream fetch, not one per request.
+func TestConcurrentMissesFetchOnce(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "subrefine_flight_*")
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	var hits atomic.Int64
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		time.Sleep(50 * time.Millisecond)
+		w.Write([]byte("trojan://tp@2.2.2.2:443#Two\n"))
+	}))
+	defer upstream.Close()
+
+	store, err := storage.New(tmpDir)
+	if err != nil {
+		t.Fatalf("init storage: %v", err)
+	}
+	if err := store.Save(&storage.Subscription{ID: "burst", Token: "t", Enabled: true, Sources: []string{upstream.URL}}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	mgr := service.NewManager(store, fetcher.New(2*time.Second), time.Hour)
+
+	const callers = 8
+	results := make([]int, callers)
+	var wg sync.WaitGroup
+	// Barrier: every caller must be parked on `start` before the first fetch
+	// begins, or a slow -race box can let the leader finish before the last
+	// goroutine even reads the (now warm) cache.
+	start := make(chan struct{})
+	for i := range callers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			nodes, err := mgr.GetSubscription("burst", "t")
+			if err != nil {
+				results[i] = -1
+				return
+			}
+			results[i] = len(nodes)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("upstream fetched %d times, want 1 (concurrent misses must coalesce)", got)
+	}
+	for i, n := range results {
+		if n != 1 {
+			t.Fatalf("caller %d got %d nodes, want 1", i, n)
+		}
+	}
+}
+
+// Deleting a subscription must release its cached nodes, which carry credentials,
+// instead of holding them until the TTL lapses.
+func TestInvalidateDropsCachedNodes(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "subrefine_inval_*")
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	var hits atomic.Int64
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Write([]byte("trojan://tp@2.2.2.2:443#Two\n"))
+	}))
+	defer upstream.Close()
+
+	store, err := storage.New(tmpDir)
+	if err != nil {
+		t.Fatalf("init storage: %v", err)
+	}
+	if err := store.Save(&storage.Subscription{ID: "gone", Token: "t", Enabled: true, Sources: []string{upstream.URL}}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	mgr := service.NewManager(store, fetcher.New(2*time.Second), time.Hour)
+	if _, err := mgr.GetSubscription("gone", "t"); err != nil {
+		t.Fatalf("first read: %v", err)
+	}
+	if _, err := mgr.GetSubscription("gone", "t"); err != nil {
+		t.Fatalf("second read: %v", err)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("upstream fetched %d times with a warm cache, want 1", got)
+	}
+
+	mgr.Invalidate("gone")
+	if _, err := mgr.GetSubscription("gone", "t"); err != nil {
+		t.Fatalf("read after invalidate: %v", err)
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("upstream fetched %d times after invalidate, want 2 (cache entry survived)", got)
 	}
 }

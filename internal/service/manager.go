@@ -46,6 +46,17 @@ type Manager struct {
 	cache   map[string]*cacheItem
 	cacheMu sync.RWMutex
 	ttl     time.Duration
+	// flights coalesces concurrent misses for the same subscription, so a
+	// hundred clients arriving as the TTL lapses trigger one upstream fetch.
+	flights  map[string]*fetchCall
+	flightMu sync.Mutex
+}
+
+// fetchCall is one in-flight build of a subscription's nodes.
+type fetchCall struct {
+	done  chan struct{}
+	nodes []*model.ProxyNode
+	err   error
 }
 
 func NewManager(store *storage.Store, f *fetcher.Fetcher, cacheTTL time.Duration) *Manager {
@@ -56,11 +67,14 @@ func NewManager(store *storage.Store, f *fetcher.Fetcher, cacheTTL time.Duration
 		store:   store,
 		fetcher: f,
 		cache:   make(map[string]*cacheItem),
+		flights: make(map[string]*fetchCall),
 		ttl:     cacheTTL,
 	}
 }
 
 // GetSubscription fetches, pipelines, and returns the nodes for a subscription.
+// Callers that miss the cache wait on whoever else is already building the same
+// subscription instead of re-fetching every upstream source.
 func (m *Manager) GetSubscription(id string, token string) ([]*model.ProxyNode, error) {
 	sub, err := m.store.Get(id)
 	if err != nil {
@@ -75,17 +89,70 @@ func (m *Manager) GetSubscription(id string, token string) ([]*model.ProxyNode, 
 		return nil, ErrDisabled
 	}
 
-	// Check cache
 	fp := fingerprint(sub)
 	m.cacheMu.RLock()
 	item, ok := m.cache[id]
+	m.cacheMu.RUnlock()
 	if ok && item.def == fp && time.Since(item.fetchedAt) < m.ttl {
-		m.cacheMu.RUnlock()
 		return item.nodes, nil
 	}
-	m.cacheMu.RUnlock()
 
-	// Fetch raw nodes from all sources
+	call, leader := m.join(id)
+	if !leader {
+		<-call.done
+		return call.nodes, call.err
+	}
+	// Unconditional handoff: build() does real work (regex, JSON, network
+	// results) and a panic there must release the followers waiting on
+	// call.done instead of hanging them and stranding the flights entry.
+	settled := false
+	defer func() {
+		if !settled {
+			call.err = fmt.Errorf("subscription %q build aborted", id)
+			close(call.done)
+			m.leave(id, call)
+		}
+	}()
+	nodes, err := m.build(sub, fp)
+	call.nodes, call.err = nodes, err
+	close(call.done)
+	m.leave(id, call)
+	settled = true
+	return nodes, err
+}
+
+// join registers the caller as the builder for id, or attaches it to the
+// builder already running.
+func (m *Manager) join(id string) (*fetchCall, bool) {
+	m.flightMu.Lock()
+	defer m.flightMu.Unlock()
+	if call, ok := m.flights[id]; ok {
+		return call, false
+	}
+	call := &fetchCall{done: make(chan struct{})}
+	m.flights[id] = call
+	return call, true
+}
+
+func (m *Manager) leave(id string, call *fetchCall) {
+	m.flightMu.Lock()
+	defer m.flightMu.Unlock()
+	if m.flights[id] == call {
+		delete(m.flights, id)
+	}
+}
+
+// Invalidate drops cached delivery results for one subscription, so a deleted
+// subscription's nodes - which carry credentials - are not retained until the
+// TTL lapses.
+func (m *Manager) Invalidate(id string) {
+	m.cacheMu.Lock()
+	delete(m.cache, id)
+	m.cacheMu.Unlock()
+}
+
+// build fetches every source, applies the pipeline, and republishes the cache.
+func (m *Manager) build(sub *storage.Subscription, fp string) ([]*model.ProxyNode, error) {
 	var collected []*model.ProxyNode
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -97,17 +164,16 @@ func (m *Manager) GetSubscription(id string, token string) ([]*model.ProxyNode, 
 		}
 	}
 
-	// Apply pipeline operators
 	processed := m.applyPipeline(collected, sub.Pipeline)
 
-	// Update cache, dropping entries that are no longer reachable or usable.
+	// Replace this entry and drop anything no longer reachable or usable.
 	m.cacheMu.Lock()
 	for key, it := range m.cache {
 		if time.Since(it.fetchedAt) > m.ttl {
 			delete(m.cache, key)
 		}
 	}
-	m.cache[id] = &cacheItem{
+	m.cache[sub.ID] = &cacheItem{
 		nodes:     processed,
 		fetchedAt: time.Now(),
 		def:       fp,
