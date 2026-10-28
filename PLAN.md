@@ -2,7 +2,7 @@
 
 ## 1. 项目定位与背景
 - **替换目标**：替代当前服务器上内存占用大 (~140MB RSS)、由 Node.js 编写且鉴权不完善的 `substore` 服务（端口 3000）。
-- **目标性能**：使用 Go 语言开发，单静态二进制部署，运行时常驻物理内存控制在 **< 15MB**，启动毫秒级。
+- **目标性能**：使用 Go 语言开发，单静态二进制部署，启动毫秒级。常驻物理内存目标 **< 15MB**；内嵌 Web 控制台后实测（Windows 工作集，13 个订阅持续分发 60 轮）稳定在 **~17MB**，Go 活跃堆仅 ~1MB（gc trace `1->1->0 MB`），其余为二进制镜像页与按需加载的控制台资源。相对 Node substore (~140MB) 仍约 8 倍。Linux 上的 RSS 数字待部署时复测。
 - **与基础设施协同**：支持直接输出 sing-box 1.15+ (inbounds/outbounds/route rulesets)、Clash.Meta (Mihomo) 及标准 URI 格式。支持集成本地 WARP (127.0.0.1:40000) 与节点健康检查。
 
 ---
@@ -23,7 +23,7 @@ subrefine
 │   │   ├── emitter/        # 格式生成器 (sing-box, clash.meta, uri)
 │   │   └── pipeline/       # 节点处理器 (重命名、去重、排序、协议属性修饰)
 │   └── storage/            # 存储层 (SQLite 单文件 / JSON 持久化)
-├── web/                    # 现代化内嵌 WebUI (静态资源 embed)
+├── webui/                  # 现代化内嵌 Web 控制台 (SolidJS + Tailwind, dist 随 embed 打包)
 └── docs/                   # API 与设计文档
 ```
 
@@ -72,6 +72,12 @@ subrefine
   - 实现原子写入安全持久化存储 (JSON Storage) 与订阅管线模型。
   - 实现核心节点处理管线算子 (RegexRename, Filter, Deduplicate, Decorator)。
   - 实现 `service.Manager` 抓取调度、管道编排与内存缓存。
-- [ ] **Phase 5: 服务端部署与迁移**
+- [x] **Phase 5: 内嵌 Web 控制台**
+  - 复用 cyrene-gateway 的 SolidJS + Tailwind 设计系统，移植为 `webui/`（`//go:embed all:dist` 单二进制交付）。
+  - 双层鉴权前端化：管理令牌登录遮罩、订阅 token 一键复制、按客户端生成 sing-box / Clash.Meta / Base64 分发链接。
+  - 订阅 CRUD、管线算子可视化编排、节点预览（含 Reality/指纹/detour 特征）。
+  - 内嵌静态资源服务：RFC 9110 `Accept-Encoding` qvalue 协商预压缩旁车、哈希资源 immutable、SPA 外壳 no-store。
+  - 中英双语文案与暗/亮主题，i18n 键漂移由测试守护。
+- [ ] **Phase 6: 服务端部署与迁移**
   - 打包编译轻量二进制。
   - 替换服务器上的 Node.js substore，验证内存与功能。
