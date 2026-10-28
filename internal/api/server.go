@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -162,7 +163,18 @@ func (s *Server) handleAdminDeleteSubscription(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if err := s.storage.Delete(id); err != nil {
-		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+		// The row is always dropped from memory first; a persistence failure
+		// means it will resurrect on restart, which is a server error, not a
+		// missing subscription. Invalidate either way so credentials held in
+		// the delivery cache are never left behind.
+		if s.subManager != nil {
+			s.subManager.Invalidate(id)
+		}
+		if errors.Is(err, storage.ErrNotFound) {
+			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "delete failed: "+err.Error())
 		return
 	}
 	if s.subManager != nil {

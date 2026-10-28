@@ -173,6 +173,14 @@ func (m *Manager) build(sub *storage.Subscription, fp string) ([]*model.ProxyNod
 			delete(m.cache, key)
 		}
 	}
+	// A delete landing during this fetch must not be undone by the write:
+	// Invalidate()'s promise is that a removed subscription's nodes - with
+	// their credentials - are released promptly.
+	if _, err := m.store.Get(sub.ID); err != nil {
+		delete(m.cache, sub.ID)
+		m.cacheMu.Unlock()
+		return processed, nil
+	}
 	m.cache[sub.ID] = &cacheItem{
 		nodes:     processed,
 		fetchedAt: time.Now(),

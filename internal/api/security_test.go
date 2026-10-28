@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -211,6 +212,46 @@ func TestAdminDeleteInvalidatesDeliveryCache(t *testing.T) {
 	if len(mock.invalidated) != 1 || mock.invalidated[0] != "bye" {
 		t.Fatalf("invalidated = %v, want [bye] so cached nodes are released", mock.invalidated)
 	}
+}
+
+// A Delete that fails for a reason other than "unknown id" means the row is
+// gone from memory but may resurrect from disk; the client must hear 500,
+// not a comforting 404, and the cache must still be released.
+func TestAdminDeletePersistenceErrorIs500(t *testing.T) {
+	store, err := storage.New(t.TempDir())
+	if err != nil {
+		t.Fatalf("init storage: %v", err)
+	}
+	mock := &mockSubManager{expectedID: "haunt", expectedToken: "t"}
+	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "my_admin_secret"}
+	handler := api.NewServer(cfg, mock, flakyStore{store}).Handler()
+
+	seed := httptest.NewRecorder()
+	handler.ServeHTTP(seed, adminReq(`{"id":"haunt","token":"t","sources":["ss://a@b:1"]}`))
+	if seed.Code != http.StatusOK {
+		t.Fatalf("seed save: status = %d", seed.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/admin/subscriptions/haunt", nil)
+	req.Header.Set("Authorization", "Bearer my_admin_secret")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 (%s)", rec.Code, rec.Body.String())
+	}
+	if len(mock.invalidated) != 1 {
+		t.Fatalf("invalidated = %v, want the cache released even on failure", mock.invalidated)
+	}
+}
+
+type flakyStore struct{ *storage.Store }
+
+func (f flakyStore) Delete(id string) error {
+	if id == "haunt" {
+		return errors.New("sync to disk failed")
+	}
+	return f.Store.Delete(id)
 }
 
 // The console keeps the admin bearer token in localStorage, so shipped scripts
