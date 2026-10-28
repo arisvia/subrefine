@@ -2,6 +2,7 @@ import type { TranslationDict } from './types'
 
 export const enUS: TranslationDict = {
   common: {
+    docTitle: 'subrefine console',
     save: 'Save',
     cancel: 'Cancel',
     confirm: 'Confirm',

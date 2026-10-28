@@ -1,5 +1,6 @@
 export const zhCN = {
   common: {
+    docTitle: 'subrefine 控制台',
     save: '保存',
     cancel: '取消',
     confirm: '确认',

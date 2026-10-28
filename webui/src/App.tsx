@@ -35,6 +35,13 @@ const App: Component = () => {
     if (auth.authenticated()) void subs.load(true)
   })
 
+  // The static index.html ships the zh title; keep the browser tab honest
+  // when the operator switches to English. Brand stays lowercase - the
+  // ecosystem (sing-box, mihomo) names itself that way.
+  createEffect(() => {
+    document.title = t('common.docTitle')
+  })
+
   // Layout is passed as the Router root so the sidebar <A> links stay inside router context.
   const Layout: Component<{ children?: JSX.Element }> = props => {
     const location = useLocation()
