@@ -1,0 +1,110 @@
+// Shared UI types. The proxy/pipeline shapes mirror the Go JSON emitted by
+// internal/core/model.ProxyNode and internal/storage.Subscription.
+
+export type BadgeTone =
+  | 'green' | 'amber' | 'red' | 'gray' | 'blue' | 'purple'
+  | 'cyan' | 'pink' | 'violet' | 'teal' | 'rose' | 'orange' | 'indigo'
+
+/** Canonical protocol ids produced by internal/core/model. */
+export type Protocol =
+  | 'shadowsocks' | 'vmess' | 'vless' | 'trojan' | 'hysteria2' | 'wireguard'
+
+export type PipelineType = 'deduplicate' | 'filter' | 'rename' | 'decorate' | 'sort'
+
+export interface ProxyNode {
+  tag: string
+  type: Protocol
+  server: string
+  port: number
+  password?: string
+  uuid?: string
+  method?: string
+  network?: string
+  path?: string
+  host?: string
+  security?: string
+  server_name?: string
+  insecure?: boolean
+  alpn?: string[]
+  fingerprint?: string
+  public_key?: string
+  short_id?: string
+  flow?: string
+  up_mbps?: number
+  down_mbps?: number
+  obfs_type?: string
+  private_key?: string
+  peer_public_key?: string
+  local_addr?: string[]
+  mtu?: number
+  detour?: string
+}
+
+export interface PipelineStep {
+  type: PipelineType
+  pattern?: string
+  repl?: string
+  include?: string
+  exclude?: string
+  types?: Protocol[]
+  fingerprint?: string
+  detour?: string
+  by?: 'tag' | 'protocol'
+  order?: 'asc' | 'desc'
+}
+
+export interface Subscription {
+  id: string
+  name: string
+  token: string
+  sources: string[]
+  pipeline: PipelineStep[]
+  enabled: boolean
+  created_at: number
+  updated_at: number
+}
+
+export interface NodePreview {
+  id: string
+  count: number
+  nodes: ProxyNode[]
+}
+
+export interface AdminInfo {
+  status: string
+  version: string
+  host: string
+  port: number
+}
+
+/** Shorthand spellings users type; resolved server-side by the pipeline alias table. */
+export const PROTOCOLS: Protocol[] = ['shadowsocks', 'vmess', 'vless', 'trojan', 'hysteria2', 'wireguard']
+
+export const PROTOCOL_LABELS: Record<Protocol, string> = {
+  shadowsocks: 'Shadowsocks',
+  vmess: 'VMess',
+  vless: 'VLESS',
+  trojan: 'Trojan',
+  hysteria2: 'Hysteria2',
+  wireguard: 'WireGuard',
+}
+
+export const PROTOCOL_TONES: Record<Protocol, BadgeTone> = {
+  shadowsocks: 'blue',
+  vmess: 'violet',
+  vless: 'indigo',
+  trojan: 'amber',
+  hysteria2: 'rose',
+  wireguard: 'teal',
+}
+
+export const PIPELINE_TONES: Record<PipelineType, BadgeTone> = {
+  deduplicate: 'cyan',
+  filter: 'green',
+  rename: 'purple',
+  decorate: 'orange',
+  sort: 'gray',
+}
+
+/** uTLS fingerprints offered by the decorate operator (sing-box / mihomo set). */
+export const FINGERPRINTS = ['chrome', 'firefox', 'safari', 'edge', 'ios', 'android']
