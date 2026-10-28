@@ -138,6 +138,10 @@ export const zhCN = {
     never: '尚未拉取',
     nodeCount: '{count} 个节点',
     idConflict: 'ID 已存在，保存会覆盖原订阅',
+    noMatch: '没有匹配该关键字的订阅',
+    hintSingbox: 'JSON outbounds（sing-box 1.15）',
+    hintClash: 'YAML proxies + 代理分组（Clash.Meta）',
+    hintUri: 'Base64 URI 列表，v2rayN / PassWall 可用',
   },
   pipeline: {
     title: '管线算子',
@@ -189,6 +193,7 @@ export const zhCN = {
     title: '节点预览 · {id}',
     loading: '拉取源并执行管线中…',
     searchPlaceholder: '过滤标签 / 协议 / 地址',
+    fingerprint: 'TLS 指纹',
     empty: '无匹配节点',
     emptyAll: '该订阅当前没有可用节点',
     failed: '预览失败：{reason}',

@@ -140,6 +140,10 @@ export const enUS: TranslationDict = {
     never: 'Never fetched',
     nodeCount: '{count} nodes',
     idConflict: 'This ID already exists — saving overwrites it',
+    noMatch: 'No subscriptions match that search',
+    hintSingbox: 'JSON outbounds (sing-box 1.15)',
+    hintClash: 'YAML proxies + groups (Clash.Meta)',
+    hintUri: 'URI list for v2rayN / PassWall',
   },
   pipeline: {
     title: 'Pipeline operators',
@@ -191,6 +195,7 @@ export const enUS: TranslationDict = {
     title: 'Node preview · {id}',
     loading: 'Fetching sources and running the pipeline…',
     searchPlaceholder: 'Filter tag / protocol / address',
+    fingerprint: 'TLS fingerprint',
     empty: 'No matching nodes',
     emptyAll: 'This subscription currently has no usable nodes',
     failed: 'Preview failed: {reason}',

@@ -6,7 +6,7 @@ import { setAdminToken } from '@/lib/api'
 import { resetSubscriptionsStoreForTesting } from '@/stores/subscriptions'
 import { resetAuthStoreForTesting } from '@/stores/auth'
 import Subscriptions from '../Subscriptions'
-import type { Subscription } from '@/types/domain'
+import type { PipelineStep, Subscription } from '@/types/domain'
 
 setLocale('zh-CN')
 
@@ -47,5 +47,32 @@ describe('Subscriptions page', () => {
     fireEvent.click(screen.getByText('添加算子'))
 
     await waitFor(() => expect(screen.queryAllByLabelText('移除')).toHaveLength(1))
+  })
+
+  // Stored data can name an operator this build does not know (older binary,
+  // hand-edited JSON). The chain must degrade to the raw type - while known
+  // steps in the same chain keep translating.
+  it('shows the raw type for an unknown stored operator', async () => {
+    const odd: Subscription = {
+      ...hk,
+      id: 'odd',
+      pipeline: [{ type: 'quantum' } as unknown as PipelineStep, { type: 'filter' }],
+    }
+    global.fetch = vi.fn().mockImplementation((path: string) => {
+      const target = String(path)
+      if (target.endsWith('/nodes')) return Promise.resolve(json({ id: 'odd', count: 0, nodes: [], uris: [] }))
+      return Promise.resolve(json([odd]))
+    })
+
+    render(() => (
+      <MemoryRouter>
+        <Route path="*" component={Subscriptions} />
+      </MemoryRouter>
+    ))
+
+    await waitFor(() => {
+      const chip = screen.getByText('quantum → 过滤节点')
+      expect(chip).toBeTruthy()
+    })
   })
 })

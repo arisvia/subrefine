@@ -1,3 +1,5 @@
+// Layout shell adapted from cyrene-gateway webui (src/components/layout/Sidebar.tsx);
+// navigation entries are subrefine's own.
 import { useI18n } from '@/i18n'
 import { useThemeStore } from '@/stores/theme'
 import { Button, IconButton, IconSun, IconMoon, IconGlobe } from '@/components/ui'

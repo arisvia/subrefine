@@ -22,6 +22,8 @@ export interface ProxyNode {
   network?: string
   path?: string
   host?: string
+  headers?: Record<string, string>
+  service_name?: string
   security?: string
   server_name?: string
   insecure?: boolean
@@ -29,15 +31,20 @@ export interface ProxyNode {
   fingerprint?: string
   public_key?: string
   short_id?: string
+  spider_x?: string
   flow?: string
   up_mbps?: number
   down_mbps?: number
   obfs_type?: string
+  obfs_pass?: string
   private_key?: string
   peer_public_key?: string
+  pre_shared_key?: string
   local_addr?: string[]
   mtu?: number
+  reserved?: number[]
   detour?: string
+  extra?: Record<string, string>
 }
 
 export interface PipelineStep {
@@ -68,6 +75,8 @@ export interface NodePreview {
   id: string
   count: number
   nodes: ProxyNode[]
+  /** Wire-optional (older builds omit it), index-aligned with nodes via the store. */
+  uris?: string[]
 }
 
 export interface AdminInfo {

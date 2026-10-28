@@ -1,3 +1,5 @@
+// Layout shell adapted from cyrene-gateway webui (src/components/layout/LoginModal.tsx);
+// credential model is subrefine's static bearer token instead of a session.
 import { createSignal, Show, type Component } from 'solid-js'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from '@/i18n'

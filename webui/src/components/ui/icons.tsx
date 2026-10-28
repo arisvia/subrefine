@@ -1,3 +1,5 @@
+// Vendored from cyrene-gateway webui (src/components/ui/icons.tsx) — shared
+// stroke-icon set. Add subrefine-only glyphs at the end, keep the rest aligned.
 import { type Component, type JSX, splitProps } from 'solid-js'
 
 export interface IconProps extends JSX.SvgSVGAttributes<SVGSVGElement> {

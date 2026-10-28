@@ -11,6 +11,8 @@ export interface NodePreviewModalProps {
   loading: boolean
   error: string
   nodes: ProxyNode[]
+  /** Share URIs index-aligned with nodes; missing entries fall back to JSON. */
+  uris?: string[]
   onClose: () => void
   onRefresh: () => void
 }
@@ -22,9 +24,10 @@ export const NodePreviewModal: Component<NodePreviewModalProps> = props => {
 
   const visible = createMemo(() => {
     const q = query().trim().toLowerCase()
-    if (!q) return props.nodes
-    return props.nodes.filter(n =>
-      `${n.tag} ${n.type} ${n.server} ${n.port}`.toLowerCase().includes(q))
+    const pairs = props.nodes.map((node, i) => ({ node, uri: props.uris?.[i] ?? '' }))
+    if (!q) return pairs
+    return pairs.filter(({ node }) =>
+      `${node.tag} ${node.type} ${node.server} ${node.port}`.toLowerCase().includes(q))
   })
 
   const mix = createMemo(() => {
@@ -83,7 +86,7 @@ export const NodePreviewModal: Component<NodePreviewModalProps> = props => {
           }>
             <div class="space-y-1.5">
               <For each={visible()}>
-                {node => (
+                {({ node, uri }) => (
                   <div class="flex items-center gap-3 rounded-control border border-glass-border bg-surface-inset/50 px-3 py-2">
                     <div class="min-w-0 flex-1">
                       <div class="truncate text-sm font-medium text-foreground">{node.tag}</div>
@@ -101,12 +104,18 @@ export const NodePreviewModal: Component<NodePreviewModalProps> = props => {
                       <Show when={node.flow}>
                         <Badge tone="violet">{node.flow}</Badge>
                       </Show>
+                      <Show when={node.fingerprint}>
+                        <span title={t('preview.fingerprint')}><Badge tone="cyan">{node.fingerprint}</Badge></span>
+                      </Show>
                       <Show when={node.detour}>
                         <Badge tone="pink">↗ {node.detour}</Badge>
                       </Show>
                       <IconButton size="sm" aria-label={t('common.copy')} title={node.tag}
                         onClick={async () => {
-                          if (await copyToClipboard(JSON.stringify(node, null, 2))) toast.success(t('common.copied'))
+                          // The real shareable URI when the server could encode
+                          // this node; the raw JSON is only a fallback.
+                          const payload = uri || JSON.stringify(node, null, 2)
+                          if (await copyToClipboard(payload)) toast.success(t('common.copied'))
                         }}>
                         <IconClipboard size={13} />
                       </IconButton>

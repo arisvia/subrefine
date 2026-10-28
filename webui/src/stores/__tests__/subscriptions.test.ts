@@ -72,6 +72,55 @@ describe('subscriptions store', () => {
     expect(store.preview('hk').nodes).toHaveLength(1)
   })
 
+  // The overview fans out across every subscription at once; the store, not
+  // the page, owns the bound — five queued previews must never mean five
+  // simultaneous upstream requests. Concurrency is driven deterministically:
+  // every /nodes promise is held until the test resolves it by hand.
+  it('caps concurrent previews across different subscriptions at two', async () => {
+    const store = useSubscriptionsStore()
+    let inflight = 0
+    let peak = 0
+    let started = 0
+    const gates: Array<(payload: unknown) => void> = []
+
+    global.fetch = vi.fn().mockImplementation((path: string) => {
+      if (String(path).includes('/nodes')) {
+        started++
+        inflight++
+        peak = Math.max(peak, inflight)
+        return new Promise(resolve => {
+          gates.push((payload: unknown) => {
+            inflight--
+            resolve(payload)
+          })
+        })
+      }
+      return Promise.resolve(json([]))
+    })
+
+    // Deterministic drain: each await releases one queued microtask, enough
+    // ticks for the store's promise chains to run without wall-clock waiting.
+    const flush = async () => {
+      for (let i = 0; i < 32; i++) await Promise.resolve()
+    }
+    const ids = ['a', 'b', 'c', 'd', 'e']
+    const all = Promise.all(ids.map(id => store.runPreview(id)))
+
+    // Keep releasing whichever previews are held until all five have run;
+    // queueMicrotask-level flushing would race the promise chain inside the
+    // store, so yield through the macrotask queue between waves.
+    for (let done = 0; done < ids.length; done++) {
+      await flush()
+      const release = gates.shift()
+      if (release) release(json({ id: 'x', count: 1, nodes: nodes('x'), uris: ['ss://x'] }))
+    }
+    await all
+
+    expect(started).toBe(5)
+    expect(peak).toBe(2)
+    for (const id of ids) expect(store.preview(id).nodes).toHaveLength(1)
+  })
+
   it('surfaces a preview failure without blocking the list', async () => {
     const store = useSubscriptionsStore()
     global.fetch = vi.fn().mockImplementation((path: string) => Promise.resolve(

@@ -22,6 +22,7 @@ const Home: Component = () => {
   // Refresh every subscription once so the overview can aggregate real nodes.
   // on() runs the handler untracked: preview writes must never re-trigger this
   // fan-out, or each resolved/failed preview re-requests every subscription.
+  // The store caps concurrent previews at two; the loop here just enqueues.
   createEffect(on(() => subs.subs(), list => {
     for (const s of list) void subs.runPreview(s.id)
   }))
@@ -159,7 +160,7 @@ const Home: Component = () => {
                     <span class="w-24 shrink-0 truncate text-[11px] text-faint">{sub.id}</span>
                     <For each={DELIVERY_OPTIONS}>
                       {opt => (
-                        <button type="button" class="pill" title={opt.hint}
+                        <button type="button" class="pill" title={t(opt.hintKey)}
                           onClick={() => copy(deliveryUrl(sub.id, sub.token, opt.target), opt.label)}>
                           {opt.label}
                         </button>

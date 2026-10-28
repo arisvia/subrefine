@@ -1,14 +1,16 @@
 import { createRoot, createSignal, createMemo, untrack, type Accessor } from 'solid-js'
 import { api, apiDelete, apiPost } from '@/lib/api'
-import type { ProxyNode, Subscription } from '@/types/domain'
+import type { NodePreview, ProxyNode, Subscription } from '@/types/domain'
 
 export interface PreviewState {
   loading: boolean
   error: string
   nodes: ProxyNode[]
+  /** Share URIs index-aligned with nodes, from the /nodes response. */
+  uris: string[]
 }
 
-const EMPTY_PREVIEW: PreviewState = { loading: false, error: '', nodes: [] }
+const EMPTY_PREVIEW: PreviewState = { loading: false, error: '', nodes: [], uris: [] }
 
 export interface SubscriptionsStore {
   subs: Accessor<Subscription[]>
@@ -31,6 +33,28 @@ function createSubscriptionsStore(): SubscriptionsStore {
 
   const inFlight = new Map<string, Promise<void>>()
   let loaded = false
+
+  // The overview fans previews out across every subscription at once; cap the
+  // upstream work in the store so any caller gets the same protection and a
+  // big list never opens one connection per row.
+  const MAX_CONCURRENT_PREVIEWS = 2
+  let activePreviews = 0
+  const previewQueue: Array<() => void> = []
+
+  function acquireSlot(): Promise<void> {
+    if (activePreviews < MAX_CONCURRENT_PREVIEWS) {
+      activePreviews++
+      return Promise.resolve()
+    }
+    return new Promise<void>(res => previewQueue.push(res))
+  }
+
+  function releaseSlot() {
+    const next = previewQueue.shift()
+    // Hand-off keeps the count: the waiter inherits this slot.
+    if (next) next()
+    else activePreviews--
+  }
 
   const byId = (id: string) => subs().find(s => s.id === id)
   const preview = (id: string): PreviewState => previews()[id] ?? EMPTY_PREVIEW
@@ -98,16 +122,18 @@ function createSubscriptionsStore(): SubscriptionsStore {
 
     setPreviews(p => ({ ...p, [id]: { ...(p[id] ?? EMPTY_PREVIEW), loading: true, error: '' } }))
     const task = (async () => {
+      await acquireSlot()
       try {
-        const res = await api<{ id: string; count: number; nodes: ProxyNode[] }>(
+        const res = await api<NodePreview>(
           `/api/admin/subscriptions/${encodeURIComponent(id)}/nodes`,
           { silent: true },
         )
-        setPreviews(p => ({ ...p, [id]: { loading: false, error: '', nodes: res.nodes ?? [] } }))
+        setPreviews(p => ({ ...p, [id]: { loading: false, error: '', nodes: res.nodes ?? [], uris: res.uris ?? [] } }))
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'preview failed'
-        setPreviews(p => ({ ...p, [id]: { loading: false, error: msg, nodes: [] } }))
+        setPreviews(p => ({ ...p, [id]: { loading: false, error: msg, nodes: [], uris: [] } }))
       } finally {
+        releaseSlot()
         inFlight.delete(id)
       }
     })()

@@ -1,6 +1,6 @@
 import { type Component, For, Show, createMemo, createSignal, onMount } from 'solid-js'
 import { useSearchParams } from '@solidjs/router'
-import { useI18n } from '@/i18n'
+import { useI18n, type I18nKey } from '@/i18n'
 import { useSubscriptionsStore } from '@/stores/subscriptions'
 import {
   Badge, Button, Card, Empty, IconButton, Input, PageHeader, Skeleton,
@@ -21,7 +21,7 @@ const STEP_LABEL_KEYS = {
   rename: 'pipeline.type.rename',
   decorate: 'pipeline.type.decorate',
   sort: 'pipeline.type.sort',
-} as const satisfies Record<PipelineStep['type'], string>
+} as const satisfies Record<PipelineStep['type'], I18nKey>
 
 const Subscriptions: Component = () => {
   const { t } = useI18n()
@@ -69,7 +69,13 @@ const Subscriptions: Component = () => {
 
   const chain = (pipeline: PipelineStep[] | undefined) => {
     if (!pipeline?.length) return t('pipeline.empty')
-    return pipeline.map(step => t(STEP_LABEL_KEYS[step.type])).join(' → ')
+    // Data written by other tooling can carry operators we do not know; show
+    // the raw type instead of handing `undefined` to t().
+    const labels: Record<string, I18nKey | undefined> = STEP_LABEL_KEYS
+    return pipeline.map(step => {
+      const key = labels[step.type]
+      return key ? t(key) : step.type
+    }).join(' → ')
   }
 
   const submit = async (sub: Subscription) => {
@@ -105,7 +111,7 @@ const Subscriptions: Component = () => {
     }
   }
 
-  const previewState = createMemo(() => (previewId() ? store.preview(previewId()) : { loading: false, error: '', nodes: [] }))
+  const previewState = createMemo(() => (previewId() ? store.preview(previewId()) : { loading: false, error: '', nodes: [], uris: [] }))
 
   return (
     <>
@@ -145,7 +151,7 @@ const Subscriptions: Component = () => {
           <Show when={filtered().length} fallback={
             <Card class="p-8">
               <Empty
-                title={query() ? t('preview.empty') : t('subs.emptyTitle')}
+                title={query() ? t('subs.noMatch') : t('subs.emptyTitle')}
                 description={query() ? undefined : t('subs.emptyDesc')}
                 action={query() ? undefined : (
                   <Button size="sm" variant="primary" onClick={openCreate}><IconSparkles size={14} />{t('subs.create')}</Button>
@@ -202,10 +208,10 @@ const Subscriptions: Component = () => {
                         <For each={DELIVERY_OPTIONS}>
                           {opt => (
                             <>
-                              <a class="pill" href={deliveryUrl(sub.id, sub.token, opt.target)} target="_blank" rel="noreferrer" title={opt.hint}>
+                              <a class="pill" href={deliveryUrl(sub.id, sub.token, opt.target)} target="_blank" rel="noreferrer" title={t(opt.hintKey)}>
                                 {opt.label}
                               </a>
-                              <button type="button" class="pill" onClick={() => copyLink(sub, opt.target)}>
+                              <button type="button" class="pill" title={t(opt.hintKey)} onClick={() => copyLink(sub, opt.target)}>
                                 {t('common.copy')}
                               </button>
                             </>
@@ -247,6 +253,7 @@ const Subscriptions: Component = () => {
           loading={previewState().loading}
           error={previewState().error}
           nodes={previewState().nodes}
+          uris={previewState().uris}
           onClose={() => setPreviewId('')}
           onRefresh={() => void store.runPreview(previewId(), true)}
         />

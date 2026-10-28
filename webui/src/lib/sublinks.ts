@@ -1,17 +1,20 @@
 
+import type { I18nKey } from '@/i18n'
+
 export type DeliveryTarget = 'sing-box' | 'clash' | 'uri'
 
 export interface DeliveryOption {
   target: DeliveryTarget
   label: string
-  hint: string
+  /** i18n key describing what the target serves; resolved with t() at render. */
+  hintKey: I18nKey
 }
 
 /** The three shapes internal/api.DetectTarget negotiates, in client popularity order. */
 export const DELIVERY_OPTIONS: DeliveryOption[] = [
-  { target: 'sing-box', label: 'sing-box', hint: 'JSON outbounds (1.15)' },
-  { target: 'clash', label: 'Clash.Meta', hint: 'YAML proxies + groups' },
-  { target: 'uri', label: 'Base64', hint: 'URI list for v2rayN / PassWall' },
+  { target: 'sing-box', label: 'sing-box', hintKey: 'subs.hintSingbox' },
+  { target: 'clash', label: 'Clash.Meta', hintKey: 'subs.hintClash' },
+  { target: 'uri', label: 'Base64', hintKey: 'subs.hintUri' },
 ]
 
 /**

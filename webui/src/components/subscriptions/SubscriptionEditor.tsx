@@ -4,7 +4,8 @@ import { Alert, Button, Field, Input, Modal, Textarea, Toggle } from '@/componen
 import { PipelineEditor } from './PipelineEditor'
 import type { PipelineStep, Subscription } from '@/types/domain'
 
-const ID_PATTERN = /^[A-Za-z0-9_-]+$/
+// Mirrors storage.ValidateID (`^[A-Za-z0-9_-]{1,64}$`) — keep the two in sync.
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 
 export interface SubscriptionEditorProps {
   open: boolean

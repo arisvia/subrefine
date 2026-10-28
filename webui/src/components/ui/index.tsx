@@ -1,3 +1,5 @@
+// Vendored from cyrene-gateway webui (src/components/ui/index.tsx) — shared
+// design-system primitives. Adapt locally only when subrefine truly diverges.
 import { type Component, type JSX, For, Show, createSignal, createMemo, createEffect, createUniqueId, on, onMount, onCleanup, splitProps } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { useToast, dismiss } from '@/lib/toast'
