@@ -19,9 +19,12 @@ export const DELIVERY_OPTIONS: DeliveryOption[] = [
 
 /**
  * Absolute delivery URL. The sub token rides in the query because that is what
- * every proxy client supports when a subscription is pasted as a URL.
+ * every proxy client supports when a subscription is pasted as a URL. A non-
+ * empty mode asks the server for that full-config template instead of the
+ * plain fragment; nothing about the choice is stored on the subscription.
  */
-export function deliveryUrl(id: string, token: string, target: DeliveryTarget): string {
+export function deliveryUrl(id: string, token: string, target: DeliveryTarget, mode = ''): string {
   const q = new URLSearchParams({ token, target })
+  if (mode) q.set('mode', mode)
   return `${location.origin}/s/${encodeURIComponent(id)}?${q.toString()}`
 }

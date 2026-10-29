@@ -4,14 +4,14 @@ import { useI18n, type I18nKey } from '@/i18n'
 import { useSubscriptionsStore } from '@/stores/subscriptions'
 import {
   Badge, Button, Card, Empty, IconButton, Input, PageHeader, Skeleton,
-  IconEdit, IconEye, IconSparkles, IconSearch, IconTrash, IconZap,
+  IconEdit, IconEye, IconSparkles, IconSearch, IconTrash, IconZap, IconLink,
 } from '@/components/ui'
 import { confirm } from '@/lib/confirm'
 import { toast } from '@/lib/toast'
-import { copyToClipboard } from '@/lib/clipboard'
 import { formatBytes, formatExpiry, timeAgo, timeUnitsFor } from '@/lib/format'
-import { DELIVERY_OPTIONS, deliveryUrl } from '@/lib/sublinks'
+import { DELIVERY_OPTIONS, type DeliveryTarget } from '@/lib/sublinks'
 import { SubscriptionEditor } from '@/components/subscriptions/SubscriptionEditor'
+import { DeliveryModal } from '@/components/subscriptions/DeliveryModal'
 import { NodePreviewModal } from '@/components/subscriptions/NodePreviewModal'
 import type { PipelineStep, Subscription } from '@/types/domain'
 
@@ -33,6 +33,7 @@ const Subscriptions: Component = () => {
   const [saving, setSaving] = createSignal(false)
   const [query, setQuery] = createSignal('')
   const [previewId, setPreviewId] = createSignal('')
+  const [delivery, setDelivery] = createSignal<{ sub: Subscription; target: DeliveryTarget } | null>(null)
 
   onMount(() => {
     void store.load()
@@ -109,12 +110,6 @@ const Subscriptions: Component = () => {
   const toggleEnabled = async (sub: Subscription) => {
     if (await store.save({ ...sub, enabled: !sub.enabled })) {
       toast.success(sub.enabled ? t('common.disabled') : t('common.enabled'))
-    }
-  }
-
-  const copyLink = async (sub: Subscription, target: (typeof DELIVERY_OPTIONS)[number]['target']) => {
-    if (await copyToClipboard(deliveryUrl(sub.id, sub.token, target))) {
-      toast.success(t('subs.linkCopied', { target }))
     }
   }
 
@@ -237,17 +232,15 @@ const Subscriptions: Component = () => {
                         </div>
                       </div>
 
-                      <div class="flex flex-wrap items-center gap-1.5">
+                      <div class="flex flex-wrap items-center gap-1.5 border-t border-glass-border/60 pt-2.5">
+                        <span class="mr-0.5 inline-flex items-center gap-1 text-[11px] text-faint">
+                          <IconLink size={11} />{t('subs.linksLabel')}
+                        </span>
                         <For each={DELIVERY_OPTIONS}>
                           {opt => (
-                            <>
-                              <a class="pill" href={deliveryUrl(sub.id, sub.token, opt.target)} target="_blank" rel="noreferrer" title={t(opt.hintKey)}>
-                                {opt.label}
-                              </a>
-                              <button type="button" class="pill" title={t(opt.hintKey)} onClick={() => copyLink(sub, opt.target)}>
-                                {t('common.copy')}
-                              </button>
-                            </>
+                            <button type="button" class="pill" title={t('subs.linksOpen')} onClick={() => setDelivery({ sub, target: opt.target })}>
+                              {opt.label}
+                            </button>
                           )}
                         </For>
                         <Show when={state().nodes.length}>
@@ -292,6 +285,12 @@ const Subscriptions: Component = () => {
           onRefresh={() => void store.runPreview(previewId(), true)}
         />
       </Show>
+
+      <DeliveryModal
+        sub={delivery()?.sub ?? null}
+        initialTarget={delivery()?.target ?? 'sing-box'}
+        onClose={() => setDelivery(null)}
+      />
     </>
   )
 }

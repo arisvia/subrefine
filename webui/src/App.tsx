@@ -3,6 +3,7 @@ import { HashRouter, Route, A, useLocation } from '@solidjs/router'
 import { useAuthStore } from './stores/auth'
 import { useSubscriptionsStore } from './stores/subscriptions'
 import { useKeysStore } from './stores/keys'
+import { useTemplatesStore } from './stores/templates'
 import { ThemeToggle, LanguageToggle } from './components/layout/Sidebar'
 import { useI18n } from './i18n'
 import {
@@ -25,6 +26,7 @@ const App: Component = () => {
   const auth = useAuthStore()
   const subs = useSubscriptionsStore()
   const keysPool = useKeysStore()
+  const templates = useTemplatesStore()
   const { t } = useI18n()
   const [open, setOpen] = createSignal(false)
 
@@ -39,6 +41,7 @@ const App: Component = () => {
     if (auth.authenticated()) {
       void subs.load(true)
       void keysPool.load()
+      void templates.load()
     }
   })
 

@@ -1,7 +1,6 @@
-import { type Component, For, Show, createEffect, createMemo, createResource, createSignal } from 'solid-js'
+import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js'
 import { useI18n } from '@/i18n'
 import { Alert, Button, Checkbox, Field, Input, Modal, Select, Textarea, Toggle } from '@/components/ui'
-import { api } from '@/lib/api'
 import { formatBytes, formatExpiry, maskKey } from '@/lib/format'
 import { copyToClipboard } from '@/lib/clipboard'
 import { toast } from '@/lib/toast'
@@ -9,7 +8,7 @@ import { deliveryUrl } from '@/lib/sublinks'
 import { useSubscriptionsStore } from '@/stores/subscriptions'
 import { useKeysStore } from '@/stores/keys'
 import { PipelineEditor } from './PipelineEditor'
-import type { PipelineStep, SubKeyRef, Subscription, TemplateModes } from '@/types/domain'
+import type { PipelineStep, SubKeyRef, Subscription } from '@/types/domain'
 
 // Mirrors storage.ValidateID (`^[A-Za-z0-9_-]{1,64}$`) — keep the two in sync.
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
@@ -89,20 +88,6 @@ export const SubscriptionEditor: Component<SubscriptionEditorProps> = props => {
 
   const editing = () => !!props.initial
   const sources = createMemo(() => sourcesText().split('\n').map(s => s.trim()).filter(Boolean))
-
-  // Full-config modes come from the server's template directory; a console
-  // without them (feature off / fetch failure) still offers the fragment.
-  const [modes] = createResource(() => props.open, open =>
-    open
-      ? api<TemplateModes>('/api/admin/templates').catch(() => ({ singbox: [], clash: [] } as TemplateModes))
-      : Promise.resolve({ singbox: [], clash: [] } as TemplateModes))
-  const modeOptions = (list: string[] | undefined) => [
-    { value: '', label: t('subs.modeFragment') },
-    ...(list ?? []).map(m => ({ value: m, label: m })),
-  ]
-  const sbOptions = createMemo(() => modeOptions(modes()?.singbox))
-  const clOptions = createMemo(() => modeOptions(modes()?.clash))
-  const noTemplates = createMemo(() => !(modes()?.singbox?.length ?? 0) && !(modes()?.clash?.length ?? 0))
 
   const problems = createMemo(() => {
     const out: string[] = []
@@ -186,22 +171,6 @@ export const SubscriptionEditor: Component<SubscriptionEditorProps> = props => {
               />
               <span class="text-sm text-muted">{draft().enabled ? t('common.enabled') : t('common.disabled')}</span>
             </div>
-          </Field>
-          <Field label={t('subs.singboxMode')} hint={noTemplates() ? t('subs.noTemplates') : t('subs.singboxModeHint')}>
-            <Select
-              value={draft().singbox_mode ?? ''}
-              options={sbOptions()}
-              ariaLabel={t('subs.singboxMode')}
-              onChange={v => setDraft({ ...draft(), singbox_mode: v })}
-            />
-          </Field>
-          <Field label={t('subs.clashMode')} hint={noTemplates() ? t('subs.noTemplates') : t('subs.clashModeHint')}>
-            <Select
-              value={draft().clash_mode ?? ''}
-              options={clOptions()}
-              ariaLabel={t('subs.clashMode')}
-              onChange={v => setDraft({ ...draft(), clash_mode: v })}
-            />
           </Field>
         </div>
 
