@@ -67,8 +67,16 @@ export interface Subscription {
   sources: string[]
   pipeline: PipelineStep[]
   enabled: boolean
+  /** Full-config template mode names; empty/absent = fragment delivery. */
+  singbox_mode?: string
+  clash_mode?: string
   created_at: number
   updated_at: number
+}
+
+export interface TemplateModes {
+  singbox: string[]
+  clash: string[]
 }
 
 export interface NodePreview {
