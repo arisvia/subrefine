@@ -17,7 +17,7 @@ func TestDeliveryUserinfoHeaders(t *testing.T) {
 	n1 := &model.ProxyNode{Tag: "A", Type: model.ProtoShadowsocks, Server: "1.1.1.1", Port: 8388, Method: "aes-128-gcm", Password: "p"}
 	mock := &keyMock{
 		nodes: []*model.ProxyNode{n1},
-		keys:  map[string]*storage.SubKey{"tk": {ID: "a", Token: "tk"}},
+		keys:  map[string]*storage.SubKeyRef{"tk": {ID: "a"}},
 		info:  &model.SubscriptionInfo{Upload: 1 << 30, Download: 2 << 30, Total: 100 << 30, Expire: 1735689600, UpdateInterval: 24, Reported: true},
 	}
 	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "admin"}

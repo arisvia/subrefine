@@ -34,13 +34,13 @@ func (m *mockSubManager) GetSubscription(id string, token string) ([]*model.Prox
 	return m.nodes, nil
 }
 
-func (m *mockSubManager) Resolve(id, token string) (*storage.Subscription, *storage.SubKey, []*model.ProxyNode, error) {
+func (m *mockSubManager) Resolve(id, token string) (*storage.Subscription, *storage.SubKeyRef, []*model.ProxyNode, error) {
 	if id != m.expectedID || token != m.expectedToken {
 		return nil, nil, nil, errors.New("forbidden")
 	}
 	sub := &storage.Subscription{ID: id, Token: token, Enabled: true}
-	key := &storage.SubKey{ID: "default", Name: "Default", Token: token, Disabled: m.disabled}
-	return sub, key, m.nodes, nil
+	ref := &storage.SubKeyRef{ID: "default", Disabled: m.disabled}
+	return sub, ref, m.nodes, nil
 }
 
 func (m *mockSubManager) Invalidate(id string) {

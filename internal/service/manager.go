@@ -93,16 +93,13 @@ func (m *Manager) FullModes(id string) (singbox, clash string) {
 }
 
 // GetSubscription fetches, pipelines, and returns the full node set for a
-// subscription, authenticating the token against any of its delivery keys.
+// subscription, authenticating the token against the global delivery-key pool.
 // Callers that miss the cache wait on whoever else is already building the same
 // subscription instead of re-fetching every upstream source.
 func (m *Manager) GetSubscription(id string, token string) ([]*model.ProxyNode, error) {
-	sub, err := m.store.Get(id)
+	sub, _, _, err := m.store.Authenticate(id, token)
 	if err != nil {
-		return nil, err
-	}
-	if sub.FindKey(token) == nil {
-		return nil, ErrUnauthorized
+		return nil, translateAuth(err)
 	}
 	if !sub.Enabled {
 		return nil, ErrDisabled
@@ -110,27 +107,44 @@ func (m *Manager) GetSubscription(id string, token string) ([]*model.ProxyNode, 
 	return m.nodes(sub)
 }
 
-// Resolve authenticates the token against the subscription's delivery keys and
-// returns the matching key plus the full (unfiltered) node set. The caller
-// applies key.Disabled per request, so per-key blacklists never poison or
-// re-fetch the shared upstream cache.
-func (m *Manager) Resolve(id, token string) (*storage.Subscription, *storage.SubKey, []*model.ProxyNode, error) {
-	sub, err := m.store.Get(id)
+// Resolve authenticates the token against the global key pool, checks that the
+// subscription attaches it, and returns the (subscription, key) pair's
+// reference plus the full (unfiltered) node set. The caller applies
+// ref.Disabled per request, so per-key blacklists never poison or re-fetch the
+// shared upstream cache.
+func (m *Manager) Resolve(id, token string) (*storage.Subscription, *storage.SubKeyRef, []*model.ProxyNode, error) {
+	sub, ref, err := m.auth(id, token)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	key := sub.FindKey(token)
-	if key == nil {
-		return nil, nil, nil, ErrUnauthorized
-	}
-	if !sub.Enabled {
-		return nil, nil, nil, ErrDisabled
-	}
 	nodes, err := m.nodes(sub)
 	if err != nil {
-		return sub, key, nil, err
+		return sub, ref, nil, err
 	}
-	return sub, key, nodes, nil
+	return sub, ref, nodes, nil
+}
+
+func (m *Manager) auth(id, token string) (*storage.Subscription, *storage.SubKeyRef, error) {
+	sub, _, ref, err := m.store.Authenticate(id, token)
+	if err != nil {
+		return nil, nil, translateAuth(err)
+	}
+	if !sub.Enabled {
+		return nil, nil, ErrDisabled
+	}
+	return sub, ref, nil
+}
+
+// translateAuth maps store auth failures onto the service error vocabulary so
+// the API can answer 403 without inspecting storage internals. Unknown ids
+// collapse into unauthorized: delivery must not enumerate subscriptions.
+func translateAuth(err error) error {
+	switch {
+	case errors.Is(err, storage.ErrNotFound), errors.Is(err, storage.ErrUnauthorized):
+		return ErrUnauthorized
+	default:
+		return err
+	}
 }
 
 // nodes returns the cached full node set, building it under singleflight on a

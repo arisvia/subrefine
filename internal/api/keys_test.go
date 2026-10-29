@@ -16,10 +16,11 @@ import (
 	"github.com/arisvia/subrefine/internal/storage"
 )
 
-// keyMock authenticates several delivery tokens, each with its own blacklist.
+// keyMock authenticates several delivery tokens, each attached with its own
+// (subscription, key) blacklist.
 type keyMock struct {
 	nodes   []*model.ProxyNode
-	keys    map[string]*storage.SubKey
+	keys    map[string]*storage.SubKeyRef
 	info    *model.SubscriptionInfo
 	sources []*model.SourceInfo
 }
@@ -31,12 +32,12 @@ func (m *keyMock) GetSubscription(id, token string) ([]*model.ProxyNode, error) 
 	return m.nodes, nil
 }
 
-func (m *keyMock) Resolve(id, token string) (*storage.Subscription, *storage.SubKey, []*model.ProxyNode, error) {
-	k, ok := m.keys[token]
+func (m *keyMock) Resolve(id, token string) (*storage.Subscription, *storage.SubKeyRef, []*model.ProxyNode, error) {
+	ref, ok := m.keys[token]
 	if !ok {
 		return nil, nil, nil, errors.New("forbidden")
 	}
-	return &storage.Subscription{ID: id, Enabled: true}, k, m.nodes, nil
+	return &storage.Subscription{ID: id, Enabled: true}, ref, m.nodes, nil
 }
 
 func (m *keyMock) Invalidate(string) {}
@@ -54,9 +55,9 @@ func TestKeyDeliveryBlacklist(t *testing.T) {
 	n2 := &model.ProxyNode{Tag: "Hide", Type: model.ProtoTrojan, Server: "2.2.2.2", Port: 443, Password: "tp"}
 	mock := &keyMock{
 		nodes: []*model.ProxyNode{n1, n2},
-		keys: map[string]*storage.SubKey{
-			"tok-full":  {ID: "a", Token: "tok-full"},
-			"tok-minus": {ID: "b", Token: "tok-minus", Disabled: []string{n2.Identity()}},
+		keys: map[string]*storage.SubKeyRef{
+			"tok-full":  {ID: "a"},
+			"tok-minus": {ID: "b", Disabled: []string{n2.Identity()}},
 		},
 	}
 	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "admin"}
@@ -137,9 +138,9 @@ func TestPreviewExposesIdentities(t *testing.T) {
 	}
 }
 
-// Saving through the admin API normalizes keys (generated tokens, synced
-// primary) and rejects ambiguous duplicates with 400, not 500.
-func TestSaveKeyNormalizationAndDuplicates(t *testing.T) {
+// The global key API: create (generated token), attach by reference through a
+// subscription save, reject unknown references, and reject duplicate tokens.
+func TestGlobalKeyLifecycle(t *testing.T) {
 	store, err := storage.New(t.TempDir())
 	if err != nil {
 		t.Fatalf("store: %v", err)
@@ -147,33 +148,109 @@ func TestSaveKeyNormalizationAndDuplicates(t *testing.T) {
 	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "admin"}
 	h := api.NewServer(cfg, &mockSubManager{}, store, nil).Handler()
 
-	post := func(body string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodPost, "/api/admin/subscriptions", strings.NewReader(body))
+	admin := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer admin")
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
 		return rec
 	}
 
-	rec := post(`{"id":"gen","enabled":true,"sources":["x"],"keys":[{"name":"A"},{"name":"B"}]}`)
+	rec := admin(http.MethodPost, "/api/admin/keys", `{"name":"Bob"}`)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("save with empty tokens: %d %s", rec.Code, rec.Body.String())
+		t.Fatalf("create key: %d %s", rec.Code, rec.Body.String())
 	}
-	var resp struct {
-		Sub storage.Subscription `json:"sub"`
+	var bob struct {
+		ID    string `json:"id"`
+		Token string `json:"token"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
+	if err := json.Unmarshal(rec.Body.Bytes(), &bob); err != nil {
+		t.Fatalf("decode key: %v", err)
 	}
-	if len(resp.Sub.Keys) != 2 || len(resp.Sub.Keys[0].Token) != 32 || resp.Sub.Keys[0].Token == resp.Sub.Keys[1].Token {
-		t.Fatalf("keys not generated distinctly: %+v", resp.Sub.Keys)
-	}
-	if resp.Sub.Token != resp.Sub.Keys[0].Token {
-		t.Fatal("primary token not synced to keys[0]")
+	if len(bob.Token) != 32 || bob.ID == "" {
+		t.Fatalf("generated key fields wrong: %+v", bob)
 	}
 
-	rec = post(`{"id":"dup","enabled":true,"sources":["x"],"keys":[{"token":"same"},{"token":"same"}]}`)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("duplicate tokens must be 400, got %d %s", rec.Code, rec.Body.String())
+	// Duplicate token rejected with 409.
+	if code := admin(http.MethodPost, "/api/admin/keys", `{"name":"Clone","token":"`+bob.Token+`"}`).Code; code != http.StatusConflict {
+		t.Fatalf("duplicate token must be 409, got %d", code)
+	}
+
+	// Attach Bob to a subscription by reference.
+	rec = admin(http.MethodPost, "/api/admin/subscriptions",
+		`{"id":"feed","enabled":true,"sources":["x"],"keys":[{"id":"`+bob.ID+`"}]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("attach: %d %s", rec.Code, rec.Body.String())
+	}
+	saved, _ := store.Get("feed")
+	if saved.Token != bob.Token {
+		t.Fatalf("primary token must mirror attached key: %q vs %q", saved.Token, bob.Token)
+	}
+
+	// Unknown reference rejected with 400, not 500.
+	if code := admin(http.MethodPost, "/api/admin/subscriptions",
+		`{"id":"bad","enabled":true,"sources":["x"],"keys":[{"id":"ghost"}]}`).Code; code != http.StatusBadRequest {
+		t.Fatalf("unknown key ref must be 400, got %d", code)
+	}
+
+	// Listing surfaces usage so the console can show blast radius.
+	rec = admin(http.MethodGet, "/api/admin/keys", "")
+	var listed []struct {
+		ID    string   `json:"id"`
+		InUse []string `json:"in_use"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != bob.ID || len(listed[0].InUse) != 1 || listed[0].InUse[0] != "feed" {
+		t.Fatalf("usage not reported: %+v", listed)
+	}
+
+	// Deleting an attached key is blocked until forced with cascade.
+	if code := admin(http.MethodDelete, "/api/admin/keys/"+bob.ID, "").Code; code != http.StatusConflict {
+		t.Fatalf("in-use delete must be 409, got %d", code)
+	}
+	if code := admin(http.MethodDelete, "/api/admin/keys/"+bob.ID+"?cascade=1", "").Code; code != http.StatusOK {
+		t.Fatalf("cascade delete must be 200, got %d", code)
+	}
+	after, _ := store.Get("feed")
+	if after.Token == bob.Token || len(after.Token) != 32 {
+		t.Fatalf("cascade must issue a fresh default key, got %q", after.Token)
+	}
+}
+
+// Rotating a key's token through the API re-syncs the mirrored primary token
+// on every attaching subscription, so the console shows the new link.
+func TestKeyRotationPropagates(t *testing.T) {
+	store, err := storage.New(t.TempDir())
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "admin"}
+	h := api.NewServer(cfg, &mockSubManager{}, store, nil).Handler()
+	admin := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer admin")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	k := &storage.DeliveryKey{Name: "Alice", Token: "old-token"}
+	if err := store.SaveKey(k); err != nil {
+		t.Fatalf("seed key: %v", err)
+	}
+	if err := store.Save(&storage.Subscription{ID: "feed", Enabled: true, Sources: []string{"x"},
+		Keys: []storage.SubKeyRef{{ID: k.ID}}}); err != nil {
+		t.Fatalf("seed sub: %v", err)
+	}
+
+	rec := admin(http.MethodPut, "/api/admin/keys/"+k.ID, `{"token":"rotated-99"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("rotate: %d %s", rec.Code, rec.Body.String())
+	}
+	sub, _ := store.Get("feed")
+	if sub.Token != "rotated-99" {
+		t.Fatalf("rotation must re-sync mirror, got %q", sub.Token)
 	}
 }

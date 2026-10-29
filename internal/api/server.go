@@ -22,15 +22,20 @@ type SubStorage interface {
 	List() []*storage.Subscription
 	Save(sub *storage.Subscription) error
 	Delete(id string) error
+	ListKeys() []*storage.DeliveryKey
+	GetKey(id string) (*storage.DeliveryKey, error)
+	SaveKey(k *storage.DeliveryKey) error
+	DeleteKey(id string, cascade bool) error
+	KeyUsage(id string) []string
 }
 
 // SubManager is the interface for retrieving subscription nodes and verifying sub tokens.
 type SubManager interface {
 	GetSubscription(id string, token string) ([]*model.ProxyNode, error)
-	// Resolve authenticates a delivery token against the subscription's keys
-	// and returns the matching key with the full node set; callers apply
-	// key.Disabled per request.
-	Resolve(id, token string) (*storage.Subscription, *storage.SubKey, []*model.ProxyNode, error)
+	// Resolve authenticates a delivery token against the global key pool and
+	// returns the subscription's reference for that key; callers apply
+	// ref.Disabled per request.
+	Resolve(id, token string) (*storage.Subscription, *storage.SubKeyRef, []*model.ProxyNode, error)
 	// Invalidate drops cached delivery results for a subscription, so a deleted
 	// subscription's nodes (which include credentials) are not held until the TTL
 	// lapses.
@@ -87,6 +92,10 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /s/{id}", s.handleSubscribe)
 	s.mux.HandleFunc("GET /api/admin/info", s.adminAuthMiddleware(s.handleAdminInfo))
 	s.mux.HandleFunc("GET /api/admin/templates", s.adminAuthMiddleware(s.handleAdminTemplates))
+	s.mux.HandleFunc("GET /api/admin/keys", s.adminAuthMiddleware(s.handleAdminListKeys))
+	s.mux.HandleFunc("POST /api/admin/keys", s.adminAuthMiddleware(s.handleAdminCreateKey))
+	s.mux.HandleFunc("PUT /api/admin/keys/{id}", s.adminAuthMiddleware(s.handleAdminUpdateKey))
+	s.mux.HandleFunc("DELETE /api/admin/keys/{id}", s.adminAuthMiddleware(s.handleAdminDeleteKey))
 	s.mux.HandleFunc("GET /api/admin/subscriptions", s.adminAuthMiddleware(s.handleAdminListSubscriptions))
 	s.mux.HandleFunc("POST /api/admin/subscriptions", s.adminAuthMiddleware(s.handleAdminSaveSubscription))
 	s.mux.HandleFunc("DELETE /api/admin/subscriptions/{id}", s.adminAuthMiddleware(s.handleAdminDeleteSubscription))
@@ -164,15 +173,13 @@ func (s *Server) handleAdminSaveSubscription(w http.ResponseWriter, r *http.Requ
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := sub.Normalize(); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to prepare delivery keys")
-		return
-	}
-	if dup := sub.DuplicateTokenID(); dup != "" {
-		writeJSONError(w, http.StatusBadRequest, "two delivery keys share the same token")
-		return
-	}
 	if err := s.storage.Save(&sub); err != nil {
+		// A stale key reference means the console (or a hand-edit) named a
+		// delivery key that does not exist; that is operator error, not 500.
+		if errors.Is(err, storage.ErrUnknownKey) {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		writeJSONError(w, http.StatusInternalServerError, "save failed: "+err.Error())
 		return
 	}
@@ -298,14 +305,14 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, key, nodes, err := s.subManager.Resolve(subID, token)
+	_, ref, nodes, err := s.subManager.Resolve(subID, token)
 	if err != nil {
 		http.Error(w, `{"error":"invalid subscription or token"}`, http.StatusForbidden)
 		return
 	}
 	// Per-key blacklist: the shared upstream cache keeps the full set; only
 	// this delivery drops withheld nodes.
-	nodes = model.FilterDisabled(nodes, key.Disabled)
+	nodes = model.FilterDisabled(nodes, ref.Disabled)
 
 	// Re-emit the airport's account metadata so clients show expiry/traffic.
 	// Usage is account-level, so the merged view is served to every key.
