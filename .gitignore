@@ -31,11 +31,8 @@ data/
 *.db
 *.log
 
-# localtest run artifacts (harness scripts and fixtures stay tracked)
-localtest/data*/
-localtest/*.md5
-localtest/*.exe
-localtest/bin/
+# Local test & verification harnesses
+localtest/
 
 # IDE & OS
 .DS_Store

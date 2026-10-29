@@ -79,15 +79,6 @@ npm run typecheck && npm run test && npm run build
 
 `webui/dist` 随仓库跟踪，因此只做后端改动时无需 Node 环境；前端有改动请重新 `npm run build`，CI 会重建并嵌入。
 
-`localtest/` 是本地端到端验证工具集（不参与构建）：
-
-```bash
-python localtest/serve_fixture.py &      # 本地订阅源
-go build -o subrefine-test.exe ./cmd/subrefine
-bash localtest/run_e2e.sh                # 75 项功能 + 分发 + 失败路径 + 控制台断言 + 内存门槛
-python localtest/mem_plateau.py          # 内存平台/泄漏观察（SR_PASSES/SR_ROUNDS/SR_TRAFFIC 可调）
-```
-
 ## 部署
 
 ```ini
