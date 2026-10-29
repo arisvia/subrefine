@@ -2,7 +2,7 @@ import type { TranslationDict } from './types'
 
 export const enUS: TranslationDict = {
   common: {
-    docTitle: 'subrefine console',
+    docTitle: 'Subrefine Console',
     save: 'Save',
     cancel: 'Cancel',
     confirm: 'Confirm',
@@ -83,7 +83,7 @@ export const enUS: TranslationDict = {
     authRequired: 'Admin token required',
   },
   login: {
-    title: 'subrefine console',
+    title: 'Subrefine Console',
     subtitle: 'Enter the admin token to unlock the dashboard',
     placeholder: 'Admin token (Bearer)',
     submit: 'Unlock',

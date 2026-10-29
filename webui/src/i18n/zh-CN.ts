@@ -1,6 +1,6 @@
 export const zhCN = {
   common: {
-    docTitle: 'subrefine 控制台',
+    docTitle: 'Subrefine 控制台',
     save: '保存',
     cancel: '取消',
     confirm: '确认',
@@ -81,7 +81,7 @@ export const zhCN = {
     authRequired: '需要管理员令牌',
   },
   login: {
-    title: 'subrefine 控制台',
+    title: 'Subrefine 控制台',
     subtitle: '输入管理员令牌以解锁后台',
     placeholder: '管理员令牌 (Bearer Token)',
     submit: '进入控制台',
