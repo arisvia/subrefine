@@ -9,6 +9,7 @@
 - 管线算子：过滤、正则重命名、特征去重、属性修饰（uTLS 指纹 / detour）、排序
 - 内嵌 Web 控制台（SolidJS + Tailwind，`//go:embed` 打进同一个二进制）
 - 双层鉴权：管理端 Bearer 令牌 + 每条订阅独立 token，均为恒定时间比较
+- 多密钥下发：一条订阅可挂多个 token（每人/每设备一条链接），并针对单个密钥屏蔽指定节点（按连接指纹的稳定 ID，重命名不掉、上游真变了自动失效）；旧单 token 数据自动迁移为首个密钥，已发出的链接不失效
 
 | | subrefine | Node.js Sub-Store |
 |---|---|---|
@@ -33,6 +34,8 @@ http://<host>:3000/s/<id>?token=<订阅 token>&target=sing-box&mode=tun   # 完�
 ```
 
 `target` 可取 `sing-box` / `clash` / `uri`；未显式指定时按 User-Agent 识别 sing-box 与 Clash/Mihomo，其余回落到 Base64 URI。
+
+一条订阅的每个下发密钥都是独立链接：`token=` 换成该密钥的 token 即可；密钥留空 token 保存时由服务器生成（`crypto/rand`）。节点屏蔽在控制台的「节点开关」里勾选，仅作用于该密钥的下发结果，其余密钥不受影响。
 
 ### 完整配置模板（官方客户端直连订阅 URL）
 

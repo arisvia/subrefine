@@ -8,9 +8,11 @@ export interface PreviewState {
   nodes: ProxyNode[]
   /** Share URIs index-aligned with nodes, from the /nodes response. */
   uris: string[]
+  /** Stable identities index-aligned with nodes, for per-key blacklists. */
+  ids: string[]
 }
 
-const EMPTY_PREVIEW: PreviewState = { loading: false, error: '', nodes: [], uris: [] }
+const EMPTY_PREVIEW: PreviewState = { loading: false, error: '', nodes: [], uris: [], ids: [] }
 
 export interface SubscriptionsStore {
   subs: Accessor<Subscription[]>
@@ -128,10 +130,10 @@ function createSubscriptionsStore(): SubscriptionsStore {
           `/api/admin/subscriptions/${encodeURIComponent(id)}/nodes`,
           { silent: true },
         )
-        setPreviews(p => ({ ...p, [id]: { loading: false, error: '', nodes: res.nodes ?? [], uris: res.uris ?? [] } }))
+        setPreviews(p => ({ ...p, [id]: { loading: false, error: '', nodes: res.nodes ?? [], uris: res.uris ?? [], ids: res.ids ?? [] } }))
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'preview failed'
-        setPreviews(p => ({ ...p, [id]: { loading: false, error: msg, nodes: [], uris: [] } }))
+        setPreviews(p => ({ ...p, [id]: { loading: false, error: msg, nodes: [], uris: [], ids: [] } }))
       } finally {
         releaseSlot()
         inFlight.delete(id)

@@ -60,10 +60,22 @@ export interface PipelineStep {
   order?: 'asc' | 'desc'
 }
 
+/** One delivery credential: its own link plus an optional node blacklist. */
+export interface SubKey {
+  id: string
+  name: string
+  /** Empty means "generate on save" (server-side crypto/rand). */
+  token: string
+  /** ProxyNode identity hashes withheld from this key's deliveries. */
+  disabled?: string[]
+}
+
 export interface Subscription {
   id: string
   name: string
   token: string
+  /** Delivery keys; the legacy single token is keys[0]. */
+  keys?: SubKey[]
   sources: string[]
   pipeline: PipelineStep[]
   enabled: boolean
@@ -85,6 +97,8 @@ export interface NodePreview {
   nodes: ProxyNode[]
   /** Wire-optional (older builds omit it), index-aligned with nodes via the store. */
   uris?: string[]
+  /** Stable node identities, index-aligned with nodes; keys blacklist these. */
+  ids?: string[]
 }
 
 export interface AdminInfo {
