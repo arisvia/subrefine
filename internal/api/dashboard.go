@@ -175,14 +175,14 @@ func addDashboardVary(h http.Header) {
 // setDashboardSecurity pins the console to its own scripts. The admin bearer
 // token is kept in localStorage, so an injected script on this origin would
 // read it; 'self' without unsafe-inline or unsafe-eval is what makes that
-// storage choice defensible. Only two relaxations remain, each with a live
-// justification: style 'unsafe-inline' because the UI sets CSS custom
-// properties per element, and nothing else leaves the same origin - the
-// bundle contains no data:/blob: font or image URLs (the CJK @fontsource
-// package that inlined data: subsets was removed from the payload).
+// storage choice defensible. Inline style attributes stay allowed because the
+// UI sets CSS custom properties per element. font-src also accepts data:
+// because @fontsource-variable/noto-sans-sc inlines some unicode-range subsets
+// as base64 woff2 data URIs; refusing data: in font-src silently drops those
+// CJK font slices in browsers.
 func setDashboardSecurity(h http.Header) {
 	if h.Get("Content-Security-Policy") == "" {
-		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
 	}
 	if h.Get("X-Content-Type-Options") == "" {
 		h.Set("X-Content-Type-Options", "nosniff")

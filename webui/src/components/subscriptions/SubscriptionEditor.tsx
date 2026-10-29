@@ -138,6 +138,7 @@ export const SubscriptionEditor: Component<SubscriptionEditorProps> = props => {
         <Field label={t('subs.sources')} hint={t('subs.sourcesHint')}>
           <Textarea
             rows={5}
+            class="font-mono text-xs leading-relaxed resize-y"
             value={sourcesText()}
             placeholder={'https://airport.example.com/api/v1/client/subscribe?token=xxx\nvless://uuid@host:443?security=reality#self-hosted'}
             ariaLabel={t('subs.sources')}

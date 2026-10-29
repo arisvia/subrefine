@@ -316,13 +316,13 @@ func TestDashboardSendsHardeningHeaders(t *testing.T) {
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	csp := rec.Header().Get("Content-Security-Policy")
-	for _, want := range []string{"default-src 'self'", "script-src 'self'", "frame-ancestors 'none'", "font-src 'self';", "img-src 'self';"} {
+	for _, want := range []string{"default-src 'self'", "script-src 'self'", "frame-ancestors 'none'", "font-src 'self' data:", "img-src 'self';"} {
 		if !strings.Contains(csp, want) {
 			t.Fatalf("CSP %q missing %q", csp, want)
 		}
 	}
-	if strings.Contains(csp, "data:") {
-		t.Fatalf("CSP %q grants data: sources; the payload needs none", csp)
+	if strings.Contains(csp, "img-src 'self' data:") {
+		t.Fatalf("CSP %q grants data: to img-src; images require none", csp)
 	}
 	if strings.Contains(csp, "unsafe-eval") {
 		t.Fatalf("CSP %q must not allow eval", csp)

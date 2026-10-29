@@ -149,8 +149,8 @@ export const PipelineEditor: Component<PipelineEditorProps> = props => {
                 </div>
 
                 <Show when={step.type === 'filter'}>
-                  <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-0.5">
-                    <span class="text-[11px] text-faint">{t('pipeline.field.types')}</span>
+                  <div class="mt-2.5 flex flex-wrap items-center gap-x-3.5 gap-y-2 pl-0.5">
+                    <span class="text-[11px] font-medium text-faint mr-1">{t('pipeline.field.types')}</span>
                     <For each={PROTOCOLS}>
                       {(p: Protocol) => {
                         const checked = () => (step.types ?? []).includes(p)

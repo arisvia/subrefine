@@ -609,7 +609,7 @@ export const Textarea: Component<TextareaProps> = props => {
       aria-label={props.ariaLabel}
       onInput={e => props.onInput?.(e.currentTarget.value)}
       onKeyDown={props.onKeyDown}
-      class={`w-full ui-field rounded-control disabled:opacity-50 disabled:cursor-not-allowed ${props.class ?? ''}`}
+      class={`w-full px-3 py-2 text-sm ui-field rounded-control disabled:opacity-50 disabled:cursor-not-allowed ${props.class ?? ''}`}
     />
   )
 }
@@ -976,11 +976,11 @@ export interface CheckboxProps {
 
 export const Checkbox: Component<CheckboxProps> = props => (
   <label
-    class={`flex items-start gap-3 select-none cursor-pointer group ${
+    class={`inline-flex items-center gap-1.5 select-none cursor-pointer group ${
       props.disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
     } ${props.class ?? ''}`}
   >
-    <div class="relative flex items-center justify-center shrink-0 mt-0.5">
+    <div class="relative flex items-center justify-center shrink-0">
       <input
         type="checkbox"
         class="sr-only peer"
