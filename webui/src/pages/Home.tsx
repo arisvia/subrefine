@@ -58,7 +58,7 @@ const Home: Component = () => {
   }
 
   return (
-    <>
+    <div class="space-y-5 stagger">
       <PageHeader
         title={t('overview.title')}
         subtitle={t('overview.subtitle')}
@@ -99,7 +99,7 @@ const Home: Component = () => {
         </Card>
       </div>
 
-      <div class="mt-4 grid gap-3 lg:grid-cols-2">
+      <div class="grid gap-3 lg:grid-cols-2">
         <Card class="p-5 space-y-3">
           <div class="flex items-center justify-between">
             <h2 class="text-sm font-semibold text-foreground">{t('overview.protocols')}</h2>
@@ -175,7 +175,7 @@ const Home: Component = () => {
       </div>
 
       <Show when={!subs.subs().length}>
-        <Card class="mt-4 p-8">
+        <Card class="p-8">
           <Empty
             title={t('overview.quickStart')}
             description={t('overview.quickStartDesc')}
@@ -183,7 +183,7 @@ const Home: Component = () => {
           />
         </Card>
       </Show>
-    </>
+    </div>
   )
 }
 

@@ -17,7 +17,7 @@ const Settings: Component = () => {
   ]
 
   return (
-    <>
+    <div class="space-y-5 stagger">
       <PageHeader title={t('settings.title')} subtitle={t('settings.subtitle')} />
 
       <div class="space-y-3">
@@ -114,7 +114,7 @@ const Settings: Component = () => {
           </dl>
         </Card>
       </div>
-    </>
+    </div>
   )
 }
 

@@ -118,10 +118,12 @@ const Subscriptions: Component = () => {
     }
   }
 
-  const previewState = createMemo(() => (previewId() ? store.preview(previewId()) : { loading: false, error: '', nodes: [], uris: [] }))
+  const previewState = createMemo(() => (previewId() ? store.preview(previewId()) : { loading: false, error: '', nodes: [], uris: [], ids: [], info: null, sources: [] }))
 
   return (
     <>
+      {/* Modals stay OUTSIDE the stagger div: space-y margins would shift fixed overlays. */}
+      <div class="space-y-5 stagger">
       <PageHeader
         title={t('subs.title')}
         subtitle={t('subs.subtitle')}
@@ -267,6 +269,7 @@ const Subscriptions: Component = () => {
           <For each={[0, 1, 2]}>{() => <Skeleton class="h-28 w-full" />}</For>
         </div>
       </Show>
+      </div>
 
       <SubscriptionEditor
         open={editorOpen()}
