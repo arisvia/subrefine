@@ -31,6 +31,15 @@ type SubManager interface {
 	// subscription's nodes (which include credentials) are not held until the TTL
 	// lapses.
 	Invalidate(id string)
+	// FullModes reports the subscription's saved full-config template modes.
+	FullModes(id string) (singbox, clash string)
+}
+
+// TemplateRegistry supplies the startup-loaded full-config templates.
+type TemplateRegistry interface {
+	SingboxTemplate(mode string) *emitter.SingboxTemplate
+	ClashTemplate(mode string) *emitter.ClashFullTemplate
+	Modes() (singbox, clash []string)
 }
 
 // Target formats
@@ -44,15 +53,17 @@ type Server struct {
 	cfg        *config.Config
 	subManager SubManager
 	storage    SubStorage
+	templates  TemplateRegistry
 	mux        *http.ServeMux
 	limiter    *AuthLimiter
 }
 
-func NewServer(cfg *config.Config, sm SubManager, st SubStorage) *Server {
+func NewServer(cfg *config.Config, sm SubManager, st SubStorage, tpl TemplateRegistry) *Server {
 	s := &Server{
 		cfg:        cfg,
 		subManager: sm,
 		storage:    st,
+		templates:  tpl,
 		mux:        http.NewServeMux(),
 		limiter:    NewAuthLimiter(cfg != nil && cfg.TrustProxy),
 	}
@@ -68,6 +79,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /s/{id}", s.handleSubscribe)
 	s.mux.HandleFunc("GET /api/admin/info", s.adminAuthMiddleware(s.handleAdminInfo))
+	s.mux.HandleFunc("GET /api/admin/templates", s.adminAuthMiddleware(s.handleAdminTemplates))
 	s.mux.HandleFunc("GET /api/admin/subscriptions", s.adminAuthMiddleware(s.handleAdminListSubscriptions))
 	s.mux.HandleFunc("POST /api/admin/subscriptions", s.adminAuthMiddleware(s.handleAdminSaveSubscription))
 	s.mux.HandleFunc("DELETE /api/admin/subscriptions/{id}", s.adminAuthMiddleware(s.handleAdminDeleteSubscription))
@@ -138,6 +150,10 @@ func (s *Server) handleAdminSaveSubscription(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err := pipeline.ValidateSteps(sub.Pipeline); err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.validateFullModes(&sub); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -272,6 +288,33 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Subrefine-Skipped", "wireguard="+strconv.Itoa(len(skipped)))
 			log.Printf("[subrefine] %s: sing-box target dropped %d wireguard node(s) (no wireguard outbound since sing-box 1.13); clash and uri targets still carry them", subID, len(skipped))
 		}
+		sbMode, _ := s.subManager.FullModes(subID)
+		if mode := resolveFullMode(r, sbMode); mode != "" {
+			var tmpl *emitter.SingboxTemplate
+			if s.templates != nil {
+				tmpl = s.templates.SingboxTemplate(mode)
+			}
+			if tmpl == nil {
+				w.Header().Set("X-Subrefine-Full", "unknown-mode")
+				log.Printf("[subrefine] %s: sing-box full mode %q has no loaded template, serving fragment", subID, mode)
+			} else {
+				data, err := tmpl.Render(nodes)
+				switch {
+				case err == nil:
+					w.Header().Set("X-Subrefine-Full", "singbox."+mode)
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					w.Write(data)
+					return
+				case errors.Is(err, emitter.ErrNoDeliverableNodes):
+					w.Header().Set("X-Subrefine-Full", "empty-nodes")
+					log.Printf("[subrefine] %s: sing-box full mode %q has no deliverable nodes, serving fragment", subID, mode)
+				default:
+					log.Printf("[subrefine] %s: sing-box full mode %q render failed: %v", subID, mode, err)
+					http.Error(w, `{"error":"render sing-box full config failed"}`, http.StatusInternalServerError)
+					return
+				}
+			}
+		}
 		data, err := emitter.ToSingboxJSON(nodes)
 		if err != nil {
 			http.Error(w, `{"error":"generate singbox config failed"}`, http.StatusInternalServerError)
@@ -281,6 +324,33 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		w.Write(data)
 
 	case TargetClash:
+		_, clMode := s.subManager.FullModes(subID)
+		if mode := resolveFullMode(r, clMode); mode != "" {
+			var tmpl *emitter.ClashFullTemplate
+			if s.templates != nil {
+				tmpl = s.templates.ClashTemplate(mode)
+			}
+			if tmpl == nil {
+				w.Header().Set("X-Subrefine-Full", "unknown-mode")
+				log.Printf("[subrefine] %s: clash full mode %q has no loaded template, serving fragment", subID, mode)
+			} else {
+				data, err := tmpl.Render(nodes)
+				switch {
+				case err == nil:
+					w.Header().Set("X-Subrefine-Full", "clash."+mode)
+					w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+					w.Write(data)
+					return
+				case errors.Is(err, emitter.ErrNoDeliverableNodes):
+					w.Header().Set("X-Subrefine-Full", "empty-nodes")
+					log.Printf("[subrefine] %s: clash full mode %q has no deliverable nodes, serving fragment", subID, mode)
+				default:
+					log.Printf("[subrefine] %s: clash full mode %q render failed: %v", subID, mode, err)
+					http.Error(w, `{"error":"render clash full config failed"}`, http.StatusInternalServerError)
+					return
+				}
+			}
+		}
 		data, err := emitter.ToClashYAML(nodes)
 		if err != nil {
 			http.Error(w, `{"error":"generate clash config failed"}`, http.StatusInternalServerError)

@@ -69,7 +69,11 @@ func main() {
 
 	f := fetcher.New(15 * time.Second)
 	subMgr := service.NewManager(store, f, 5*time.Minute)
-	server := api.NewServer(cfg, subMgr, store)
+	tmpl, err := service.LoadTemplates(cfg.TemplatesDir)
+	if err != nil {
+		log.Fatalf("refusing to start: %v", err)
+	}
+	server := api.NewServer(cfg, subMgr, store, tmpl)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr(),

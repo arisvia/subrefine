@@ -29,14 +29,20 @@ type PipelineStep struct {
 }
 
 type Subscription struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	Token     string         `json:"token"`
-	Sources   []string       `json:"sources"` // URLs or local nodes
-	Pipeline  []PipelineStep `json:"pipeline"`
-	Enabled   bool           `json:"enabled"`
-	CreatedAt int64          `json:"created_at"`
-	UpdatedAt int64          `json:"updated_at"`
+	ID       string         `json:"id"`
+	Name     string         `json:"name"`
+	Token    string         `json:"token"`
+	Sources  []string       `json:"sources"` // URLs or local nodes
+	Pipeline []PipelineStep `json:"pipeline"`
+	Enabled  bool           `json:"enabled"`
+	// SingboxMode/ClashMode name a full-config template mode (tun, tproxy,
+	// mixed, ...) served to that target instead of the plain fragment.
+	// Empty means fragment; the console lists loadable modes from the
+	// server's template directory.
+	SingboxMode string `json:"singbox_mode,omitempty"`
+	ClashMode   string `json:"clash_mode,omitempty"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
 }
 
 type Store struct {

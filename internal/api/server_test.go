@@ -19,6 +19,8 @@ type mockSubManager struct {
 	expectedToken string
 	nodes         []*model.ProxyNode
 	invalidated   []string
+	sbMode        string
+	clMode        string
 }
 
 func (m *mockSubManager) GetSubscription(id string, token string) ([]*model.ProxyNode, error) {
@@ -30,6 +32,10 @@ func (m *mockSubManager) GetSubscription(id string, token string) ([]*model.Prox
 
 func (m *mockSubManager) Invalidate(id string) {
 	m.invalidated = append(m.invalidated, id)
+}
+
+func (m *mockSubManager) FullModes(id string) (string, string) {
+	return m.sbMode, m.clMode
 }
 
 func TestAPIServer(t *testing.T) {
@@ -54,7 +60,7 @@ func TestAPIServer(t *testing.T) {
 		},
 	}
 
-	server := api.NewServer(cfg, mockSM, nil)
+	server := api.NewServer(cfg, mockSM, nil, nil)
 	handler := server.Handler()
 
 	t.Run("Healthz", func(t *testing.T) {

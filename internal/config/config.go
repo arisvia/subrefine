@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"strconv"
@@ -17,6 +18,9 @@ type Config struct {
 	// when a proxy you control rewrites that header, otherwise any client can
 	// pick its own throttle bucket by sending a header.
 	TrustProxy bool `json:"trust_proxy" yaml:"trust_proxy"`
+	// TemplatesDir holds singbox.<mode>.json / clash.<mode>.yaml full-config
+	// templates; empty disables full-config delivery entirely.
+	TemplatesDir string `json:"templates_dir" yaml:"templates_dir"`
 }
 
 func DefaultConfig() *Config {
@@ -35,6 +39,11 @@ func DefaultConfig() *Config {
 func (c *Config) Validate() error {
 	if c.AdminToken == "" {
 		return errors.New("no admin token configured; set SUBREFINE_ADMIN_TOKEN (systemd: Environment=SUBREFINE_ADMIN_TOKEN=...)")
+	}
+	if c.TemplatesDir != "" {
+		if st, err := os.Stat(c.TemplatesDir); err != nil || !st.IsDir() {
+			return fmt.Errorf("SUBREFINE_TEMPLATES=%q is not a readable directory", c.TemplatesDir)
+		}
 	}
 	return nil
 }
@@ -65,6 +74,9 @@ func LoadFromEnv(cfg *Config) {
 		if trust, err := strconv.ParseBool(v); err == nil {
 			cfg.TrustProxy = trust
 		}
+	}
+	if dir := os.Getenv("SUBREFINE_TEMPLATES"); dir != "" {
+		cfg.TemplatesDir = dir
 	}
 }
 

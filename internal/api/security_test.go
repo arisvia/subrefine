@@ -22,7 +22,7 @@ func newAuthServer(t *testing.T) (http.Handler, *mockSubManager) {
 	}
 	mock := &mockSubManager{expectedID: "sub1", expectedToken: "tok123"}
 	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "my_admin_secret"}
-	return api.NewServer(cfg, mock, store).Handler(), mock
+	return api.NewServer(cfg, mock, store, nil).Handler(), mock
 }
 
 func adminReq(body string) *http.Request {
@@ -225,7 +225,7 @@ func TestAdminDeletePersistenceErrorIs500(t *testing.T) {
 	}
 	mock := &mockSubManager{expectedID: "haunt", expectedToken: "t"}
 	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "my_admin_secret"}
-	handler := api.NewServer(cfg, mock, flakyStore{store}).Handler()
+	handler := api.NewServer(cfg, mock, flakyStore{store}, nil).Handler()
 
 	seed := httptest.NewRecorder()
 	handler.ServeHTTP(seed, adminReq(`{"id":"haunt","token":"t","sources":["ss://a@b:1"]}`))
@@ -267,7 +267,7 @@ func TestSingboxDeliveryAnnouncesWireGuardSkip(t *testing.T) {
 	}
 	mock := &mockSubManager{expectedID: "sub1", expectedToken: "tok123", nodes: nodes}
 	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "x"}
-	handler := api.NewServer(cfg, mock, nil).Handler()
+	handler := api.NewServer(cfg, mock, nil, nil).Handler()
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=sing-box", nil))
