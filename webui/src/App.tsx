@@ -118,8 +118,8 @@ const App: Component = () => {
       <>
         <SubrefineLogo class="w-8 h-8 shrink-0" />
         <div class="min-w-0">
-          <div class="text-sm font-bold leading-tight truncate text-foreground">subrefine</div>
-          <div class="text-[10px] leading-tight text-faint truncate">subscription refinery</div>
+          <div class="text-sm font-bold leading-tight truncate text-foreground">Subrefine</div>
+          <div class="text-[10px] leading-tight text-faint truncate">Subscription Refinery</div>
         </div>
       </>
     )
