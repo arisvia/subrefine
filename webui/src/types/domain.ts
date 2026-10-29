@@ -91,6 +91,21 @@ export interface TemplateModes {
   clash: string[]
 }
 
+/** Upstream account metadata (subscription-userinfo), bytes + unix seconds. */
+export interface SubscriptionInfo {
+  upload?: number
+  download?: number
+  total?: number
+  expire?: number
+  update_interval?: number
+  reported?: boolean
+}
+
+/** One source's own numbers with the URL they came from. */
+export interface SourceInfo extends SubscriptionInfo {
+  source: string
+}
+
 export interface NodePreview {
   id: string
   count: number
@@ -99,6 +114,10 @@ export interface NodePreview {
   uris?: string[]
   /** Stable node identities, index-aligned with nodes; keys blacklist these. */
   ids?: string[]
+  /** Merged account metadata from the upstreams; absent when none reported. */
+  userinfo?: SubscriptionInfo
+  /** Per-source account breakdown for the console. */
+  sources?: SourceInfo[]
 }
 
 export interface AdminInfo {

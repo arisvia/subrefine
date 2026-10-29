@@ -2,6 +2,7 @@ import { type Component, For, Show, createEffect, createMemo, createResource, cr
 import { useI18n } from '@/i18n'
 import { Alert, Button, Checkbox, Field, Input, Modal, Select, Textarea, Toggle } from '@/components/ui'
 import { api } from '@/lib/api'
+import { formatBytes, formatExpiry } from '@/lib/format'
 import { copyToClipboard } from '@/lib/clipboard'
 import { toast } from '@/lib/toast'
 import { deliveryUrl } from '@/lib/sublinks'
@@ -335,6 +336,31 @@ export const SubscriptionEditor: Component<SubscriptionEditorProps> = props => {
           />
           <div class="pt-1 text-[11px] text-faint tabular-nums">{t('subs.sourcesCount', { count: sources().length })}</div>
         </Field>
+
+        <Show when={editing() && (subs.preview(props.initial!.id).sources?.length ?? 0) > 0}>
+          <div class="rounded-control border border-glass-border/60 bg-surface-inset/30 p-2.5 space-y-1">
+            <div class="text-xs text-muted">{t('subs.sourceInfo')}</div>
+            <For each={subs.preview(props.initial!.id).sources}>
+              {s => {
+                const used = (s.upload ?? 0) + (s.download ?? 0)
+                return (
+                  <div class="flex items-baseline justify-between gap-2 text-[11px] font-mono">
+                    <span class="truncate text-faint" title={s.source}>{s.source.replace(/^https?:\/\//, '').slice(0, 42)}</span>
+                    <span class="shrink-0 text-muted">
+                      <Show when={s.expire}>{t('subs.expires')} {formatExpiry(s.expire)}</Show>
+                      {' '}
+                      <Show when={(s.total ?? 0) > 0} fallback={
+                        <Show when={used > 0}>{t('subs.trafficUsed')} {formatBytes(used)}</Show>
+                      }>
+                        {t('subs.trafficLeft')} {formatBytes((s.total ?? 0) - used)} / {formatBytes(s.total)}
+                      </Show>
+                    </span>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
 
         <div class="rounded-control border border-glass-border bg-surface-inset/40 p-3">
           <PipelineEditor steps={pipeline()} onChange={setPipeline} />

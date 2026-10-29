@@ -32,7 +32,18 @@ export function formatBytes(bytes: number | undefined | null): string {
   const b = Number(bytes) || 0
   if (b < 1024) return `${b} B`
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
-  return `${(b / (1024 * 1024)).toFixed(2)} MB`
+  if (b < 1024 * 1024 * 1024) return `${(b / (1024 * 1024)).toFixed(2)} MB`
+  if (b < 1024 * 1024 * 1024 * 1024) return `${(b / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  return `${(b / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`
+}
+
+// formatExpiry renders a subscription-userinfo `expire` (unix seconds) as a
+// short local date; 0/absent means the upstream does not report one.
+export function formatExpiry(unix: number | undefined | null): string {
+  if (!unix) return ''
+  const d = new Date(unix * 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 export type TimeAgoUnits = {

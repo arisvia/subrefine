@@ -1,4 +1,4 @@
-import { type Component, For, Show, createMemo, createSignal, onMount } from 'solid-js'
+import { type Component, For, Show, createEffect, createMemo, createSignal, on, onMount } from 'solid-js'
 import { useSearchParams } from '@solidjs/router'
 import { useI18n, type I18nKey } from '@/i18n'
 import { useSubscriptionsStore } from '@/stores/subscriptions'
@@ -9,7 +9,7 @@ import {
 import { confirm } from '@/lib/confirm'
 import { toast } from '@/lib/toast'
 import { copyToClipboard } from '@/lib/clipboard'
-import { timeAgo, timeUnitsFor } from '@/lib/format'
+import { formatBytes, formatExpiry, timeAgo, timeUnitsFor } from '@/lib/format'
 import { DELIVERY_OPTIONS, deliveryUrl } from '@/lib/sublinks'
 import { SubscriptionEditor } from '@/components/subscriptions/SubscriptionEditor'
 import { NodePreviewModal } from '@/components/subscriptions/NodePreviewModal'
@@ -39,6 +39,13 @@ const Subscriptions: Component = () => {
     if (params.new !== undefined) openCreate()
     else if (params.edit) openEdit(params.edit)
   })
+
+  // Account status (expiry/traffic) rides the node preview; fan it out once
+  // per loaded list. on() keeps the handler untracked so resolved previews
+  // never re-trigger this loop, and the store caps upstream concurrency.
+  createEffect(on(() => store.subs(), list => {
+    for (const s of list) void store.runPreview(s.id)
+  }))
 
   const closeOverlays = () => {
     setEditorOpen(false)
@@ -184,6 +191,30 @@ const Subscriptions: Component = () => {
                             </Show>
                           </div>
                           <div class="mt-1.5 text-[11px] text-muted truncate">{chain(sub.pipeline)}</div>
+                          <Show when={state().info} keyed>
+                            {info => {
+                              const used = (info.upload ?? 0) + (info.download ?? 0)
+                              const left = (info.total ?? 0) - used
+                              const expired = !!info.expire && info.expire * 1000 < Date.now()
+                              const soon = !!info.expire && !expired && info.expire - Date.now() / 1000 < 7 * 86400
+                              return (
+                                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono">
+                                  <Show when={info.expire}>
+                                    <span class={expired ? 'text-danger' : soon ? 'text-warning' : 'text-muted'}>
+                                      {t('subs.expires')}: <span class="text-foreground">{formatExpiry(info.expire)}</span>
+                                    </span>
+                                  </Show>
+                                  <Show when={(info.total ?? 0) > 0} fallback={
+                                    <Show when={used > 0}>
+                                      <span class="text-muted">{t('subs.trafficUsed')}: <span class="text-foreground">{formatBytes(used)}</span></span>
+                                    </Show>
+                                  }>
+                                    <span class="text-muted">{t('subs.trafficLeft')}: <span class="text-foreground">{formatBytes(left)}</span> / {formatBytes(info.total)}</span>
+                                  </Show>
+                                </div>
+                              )
+                            }}
+                          </Show>
                         </div>
 
                         <div class="flex items-center gap-1 shrink-0">

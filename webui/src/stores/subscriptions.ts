@@ -1,6 +1,6 @@
 import { createRoot, createSignal, createMemo, untrack, type Accessor } from 'solid-js'
 import { api, apiDelete, apiPost } from '@/lib/api'
-import type { NodePreview, ProxyNode, Subscription } from '@/types/domain'
+import type { NodePreview, ProxyNode, SourceInfo, Subscription, SubscriptionInfo } from '@/types/domain'
 
 export interface PreviewState {
   loading: boolean
@@ -10,9 +10,13 @@ export interface PreviewState {
   uris: string[]
   /** Stable identities index-aligned with nodes, for per-key blacklists. */
   ids: string[]
+  /** Merged account metadata (expiry/traffic); null when none reported. */
+  info: SubscriptionInfo | null
+  /** Per-source account breakdown. */
+  sources: SourceInfo[]
 }
 
-const EMPTY_PREVIEW: PreviewState = { loading: false, error: '', nodes: [], uris: [], ids: [] }
+const EMPTY_PREVIEW: PreviewState = { loading: false, error: '', nodes: [], uris: [], ids: [], info: null, sources: [] }
 
 export interface SubscriptionsStore {
   subs: Accessor<Subscription[]>
@@ -130,10 +134,14 @@ function createSubscriptionsStore(): SubscriptionsStore {
           `/api/admin/subscriptions/${encodeURIComponent(id)}/nodes`,
           { silent: true },
         )
-        setPreviews(p => ({ ...p, [id]: { loading: false, error: '', nodes: res.nodes ?? [], uris: res.uris ?? [], ids: res.ids ?? [] } }))
+        setPreviews(p => ({ ...p, [id]: {
+          loading: false, error: '',
+          nodes: res.nodes ?? [], uris: res.uris ?? [], ids: res.ids ?? [],
+          info: res.userinfo ?? null, sources: res.sources ?? [],
+        } }))
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'preview failed'
-        setPreviews(p => ({ ...p, [id]: { loading: false, error: msg, nodes: [], uris: [], ids: [] } }))
+        setPreviews(p => ({ ...p, [id]: { loading: false, error: msg, nodes: [], uris: [], ids: [], info: null, sources: [] } }))
       } finally {
         releaseSlot()
         inFlight.delete(id)
