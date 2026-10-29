@@ -1,0 +1,423 @@
+# mihomo full-config template example. The @subrefine entry in
+# `proxies` is subrefine's injection marker: delivered nodes are
+# spliced in place. Groups use include-all/filter, so they pick up
+# injected proxies automatically. Fill WARP or leave the blanks
+# (mihomo tolerates an unused placeholder until selected).
+ipv6: true
+mixed-port: 7890
+tproxy-port: 12345
+routing-mark: 255
+allow-lan: true
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: strict
+keep-alive-idle: 600
+keep-alive-interval: 15
+disable-keep-alive: false
+geo-auto-update: true
+geodata-mode: false
+geox-url:
+  mmdb: https://geodata.kelee.one/Country-Masaiki.mmdb
+  asn: https://geodata.kelee.one/GeoLite2-ASN-P3TERX.mmdb
+profile:
+  store-selected: true
+  store-fake-ip: true
+external-controller: :9090
+external-ui: ui
+external-ui-url: https://github.com/Zephyruso/zashboard/releases/latest/download/dist-pingfang-only.zip
+dns:
+  enable: true
+  listen: :1053
+  ipv6: true
+  prefer-h3: true
+  respect-rules: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.0/16
+  fake-ip-range6: fdfe:dcba:9876::/64
+  fake-ip-filter-mode: blacklist
+  cache-size: 2048
+  cache-algorithm: arc
+  use-hosts: false
+  use-system-hosts: false
+  fake-ip-filter:
+  - '*.lan'
+  - '*.local'
+  - '*.localdomain'
+  - '*.internal'
+  - '*.home.arpa'
+  - localhost.ptlogin2.qq.com
+  - +.msftconnecttest.com
+  - +.msftncsi.com
+  - time.windows.com
+  - time.*.com
+  - +.pool.ntp.org
+  - +.ntp.org
+  - stun.*
+  - +.stunprotocol.org
+  - +.weixin.qq.com
+  - +.battlenet.com.cn
+  default-nameserver:
+  - 223.5.5.5
+  - 119.29.29.29
+  proxy-server-nameserver:
+  - https://223.5.5.5/dns-query
+  - https://doh.pub/dns-query
+  nameserver:
+  - https://223.5.5.5/dns-query
+  - https://doh.pub/dns-query
+  - https://120.53.53.53/dns-query
+  - 223.5.5.5
+  - 119.29.29.29
+  nameserver-policy:
+    rule-set:Private,GeositeCN:
+    - https://223.5.5.5/dns-query
+    - 223.5.5.5
+    rule-set:GeolocationNotCN:
+    - https://1.1.1.1/dns-query#Available
+    - https://dns.google/dns-query#Available
+    rule-set:AI:
+    - https://1.1.1.1/dns-query#Available
+    - https://dns.google/dns-query#Available
+    rule-set:Google:
+    - https://1.1.1.1/dns-query#Available
+    - https://dns.google/dns-query#Available
+tun:
+  enable: true
+  stack: mips
+  auto-route: true
+  auto-redirect: true
+  strict-route: true
+  auto-detect-interface: true
+  dns-hijack:
+  - any:53
+  - tcp://any:53
+  mtu: 1480
+  gso: true
+  gso-max-size: 65536
+  udp-timeout: 300
+  route-exclude-address:
+  - 224.0.0.0/3
+  - 239.255.255.250/32
+  - 255.255.255.255/32
+sniffer:
+  enable: true
+  sniff:
+    HTTP:
+      ports:
+      - '80'
+      - 8080-8880
+      override-destination: true
+    TLS:
+      ports:
+      - 443
+      - 8443
+      override-destination: true
+    QUIC:
+      ports:
+      - 443
+      - 8443
+      override-destination: true
+  force-domain:
+  - +.v2ex.com
+  - +.youtube.com
+  - +.googlevideo.com
+  - +.spotify.com
+  - +.telegram.org
+  - +.twitch.tv
+  skip-domain:
+  - Mijia Cloud
+  - +.push.apple.com
+  - +.icloud.com
+  - +.local
+  - +.lan
+  - localhost
+proxies:
+- name: '@subrefine'
+- name: WARP
+  type: wireguard
+  server: ''
+  port: 2408
+  ip: ''
+  ipv6: ''
+  private-key: ''
+  public-key: ''
+  reserved:
+  - 0
+  - 0
+  - 0
+  udp: true
+  mtu: 1280
+  dialer-proxy: Available
+  remote-dns-resolve: true
+  dns:
+  - 1.1.1.1
+proxy-groups:
+- name: Available
+  type: select
+  proxies:
+  - Auto
+  - Static
+  - HK
+  - TW
+  - JP
+  - KR
+  - US
+  - SG
+  - EU
+  - DIRECT
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Available.png
+- name: Static
+  type: select
+  include-all: true
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Static.png
+- name: AI
+  type: select
+  proxies:
+  - WARP
+  - US
+  - SG
+  - JP
+  - HK
+  - TW
+  - KR
+  - EU
+  - Available
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/AI.png
+- name: Google
+  type: select
+  proxies:
+  - WARP
+  - US
+  - SG
+  - JP
+  - HK
+  - TW
+  - KR
+  - EU
+  - Available
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google_Search.png
+- name: Media
+  type: select
+  proxies:
+  - Available
+  - US
+  - SG
+  - JP
+  - HK
+  - TW
+  - KR
+  - EU
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Media.png
+- name: TikTok
+  type: select
+  proxies:
+  - Available
+  - US
+  - SG
+  - JP
+  - HK
+  - TW
+  - KR
+  - EU
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/TikTok.png
+- name: Spotify
+  type: select
+  proxies:
+  - Available
+  - US
+  - SG
+  - JP
+  - HK
+  - TW
+  - KR
+  - EU
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Spotify.png
+- name: Bypass
+  type: select
+  proxies:
+  - DIRECT
+  - Available
+  - HK
+  - TW
+  - JP
+  - KR
+  - US
+  - SG
+  - EU
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Bypass.png
+- name: Final
+  type: select
+  proxies:
+  - Available
+  - DIRECT
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Final.png
+- type: url-test
+  url: https://www.gstatic.com/generate_204
+  include-all: true
+  tolerance: 50
+  interval: 600
+  name: Auto
+  lazy: false
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Auto.png
+- type: url-test
+  url: https://www.gstatic.com/generate_204
+  include-all: true
+  tolerance: 50
+  interval: 600
+  name: HK
+  filter: (?i)(🇭🇰|香港|港|HK|Hong)
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Hong_Kong.png
+- type: url-test
+  url: https://www.gstatic.com/generate_204
+  include-all: true
+  tolerance: 50
+  interval: 600
+  name: TW
+  filter: (?i)(🇹🇼|台湾|台灣|台|TW|Tai)
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Taiwan.png
+- type: url-test
+  url: https://www.gstatic.com/generate_204
+  include-all: true
+  tolerance: 50
+  interval: 600
+  name: JP
+  filter: (?i)(🇯🇵|日本|川日|东京|東京|大阪|泉日|埼玉|沪日|深日|JP|Japan)
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Japan.png
+- type: url-test
+  url: https://www.gstatic.com/generate_204
+  include-all: true
+  tolerance: 50
+  interval: 600
+  name: KR
+  filter: (?i)(🇰🇷|韩国|韓国|韓國|首尔|首爾|韩|韓|KR|KOR|Korea)
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Korea.png
+- type: url-test
+  url: https://www.gstatic.com/generate_204
+  include-all: true
+  tolerance: 50
+  interval: 600
+  name: US
+  filter: (?i)(🇺🇸|美国|美國|美西|美东|美東|波特兰|波特蘭|达拉斯|達拉斯|俄勒冈|俄勒岡|凤凰城|鳳凰城|费利蒙|硅谷|矽谷|拉斯维加斯|拉斯維加斯|洛杉矶|洛杉磯|圣何塞|聖何塞|圣克拉拉|西雅图|西雅圖|芝加哥|纽约|紐約|US|USA|United States)
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/United_States.png
+- type: url-test
+  url: https://www.gstatic.com/generate_204
+  include-all: true
+  tolerance: 50
+  interval: 600
+  name: SG
+  filter: (?i)(🇸🇬|新加坡|坡|狮城|獅城|SG|SGP|Singapore)
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Singapore.png
+- type: url-test
+  url: https://www.gstatic.com/generate_204
+  include-all: true
+  tolerance: 50
+  interval: 600
+  name: EU
+  filter: (?i)(🇩🇪|🇬🇧|🇫🇷|🇳🇱|🇪🇺|德国|德國|法兰克福|法蘭克福|英国|英國|伦敦|倫敦|法国|法國|巴黎|荷兰|荷蘭|阿姆斯特丹|DE|DEU|Germany|Frankfurt|UK|GB|GBR|United Kingdom|Britain|London|FR|FRA|France|Paris|NL|NLD|Netherlands|Amsterdam)
+  icon: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/European_Union.png
+rules:
+- AND,((NETWORK,udp),(DST-PORT,123)),DIRECT
+- RULE-SET,Private,DIRECT
+- GEOIP,LAN,DIRECT,no-resolve
+- RULE-SET,Ads,REJECT
+- DST-PORT,853,REJECT
+- DST-PORT,3478,REJECT
+- RULE-SET,AI,AI
+- RULE-SET,MicrosoftCN,Bypass
+- RULE-SET,AppleCN,Bypass
+- RULE-SET,GameCN,Bypass
+- RULE-SET,Google,Google
+- RULE-SET,Netflix,Media
+- RULE-SET,HBO,Media
+- RULE-SET,PrimeVideo,Media
+- RULE-SET,TikTok,TikTok
+- RULE-SET,Spotify,Spotify
+- RULE-SET,GeolocationNotCN,Available
+- RULE-SET,GeositeCN,Bypass
+- GEOIP,CN,Bypass,no-resolve
+- MATCH,Final
+rule-providers:
+  Private:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs
+  Ads:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs
+  GeolocationNotCN:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs
+  AI:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs
+  MicrosoftCN:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft@cn.mrs
+  AppleCN:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple-cn.mrs
+  GameCN:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-games@cn.mrs
+  Google:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs
+  Netflix:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs
+  HBO:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/hbo.mrs
+  PrimeVideo:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/primevideo.mrs
+  TikTok:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs
+  Spotify:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs
+  GeositeCN:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs

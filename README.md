@@ -4,6 +4,7 @@
 
 - 解析并归一化 SS / SS2022 / VMess / VLESS (Reality·Vision·gRPC·WS) / Trojan / Hysteria2 / WireGuard
 - 按客户端下发对应格式：sing-box JSON、Clash.Meta (Mihomo) YAML、Base64 URI
+- 完整配置分发：以官方 schema 分流模板为骨架、节点原地注入（`@subrefine` 标记 + 正则分组），官方 sing-box / mihomo 客户端可直接加载订阅 URL；tun / tproxy / mixed 多模式，订阅级开关 + URL 覆盖
 - WireGuard 说明：sing-box 1.13.0 起移除了 wireguard 出站（新式 `endpoints` 是启动隧道，非按节点可选代理），因此 **sing-box 格式不携带 WG 节点**，并在响应头 `X-Subrefine-Skipped: wireguard=N` 与服务日志中显式声明；Clash.Meta 与 URI 格式仍完整下发 WG。产物均以 sing-box 1.14.4 / Mihomo v1.19.33 的官方解析器实测通过。
 - 管线算子：过滤、正则重命名、特征去重、属性修饰（uTLS 指纹 / detour）、排序
 - 内嵌 Web 控制台（SolidJS + Tailwind，`//go:embed` 打进同一个二进制）
@@ -28,9 +29,19 @@ SUBREFINE_ADMIN_TOKEN=change-me ./subrefine -host 0.0.0.0 -port 3000
 ```
 http://<host>:3000/s/<id>?token=<订阅 token>            # 按 User-Agent 自动协商
 http://<host>:3000/s/<id>?token=<订阅 token>&target=sing-box
+http://<host>:3000/s/<id>?token=<订阅 token>&target=sing-box&mode=tun   # 完整配置
 ```
 
 `target` 可取 `sing-box` / `clash` / `uri`；未显式指定时按 User-Agent 识别 sing-box 与 Clash/Mihomo，其余回落到 Base64 URI。
+
+### 完整配置模板（官方客户端直连订阅 URL）
+
+官方 sing-box 没有订阅/provider 概念，客户端加载 URL 必须拿到**整套可运行配置**。配置 `SUBREFINE_TEMPLATES=<目录>` 后，每个订阅可为两个目标各选一个模板模式（控制台开关，或 URL `&mode=<模式>` 临时覆盖，`&mode=off` 强制回退片段）：
+
+- 目录内命名即注册：`singbox.<模式>.json`、`clash.<模式>.yaml`（示例见 `templates.example/`，常用模式命名 `tun` / `tproxy` / `mixed`，实际不限）；
+- 模板是纯官方 schema 骨架（log/dns/inbounds/route/分组），`@subrefine` 为注入标记：`outbounds`/`proxies` 里 `{"tag":"@subrefine"}` 处原地替换为节点出站；分组引用 `@subrefine` 展开为全部节点，`@subrefine:(?i)(HK|港)` 按正则挑选（无匹配回退全量，避免空分组被客户端拒载）；
+- 渲染产物不含任何标记、经 sing-box 1.14.4 `check` 与 mihomo `-t` 实测加载；WG 在 sing-box 目标仍按 1.13.0 规则剔除并声明，Clash 目标完整保留；
+- 模板损坏拒绝启动；模式不存在/节点为空时回退片段并带 `X-Subrefine-Full: unknown-mode|empty-nodes` 响应头，绝不静默半生效。
 
 ### 配置
 
@@ -44,6 +55,7 @@ http://<host>:3000/s/<id>?token=<订阅 token>&target=sing-box
 | `SUBREFINE_DATA_DIR` | `-data` | `./data` | 订阅定义持久化目录 |
 | `SUBREFINE_DASHBOARD` | | 空 | 用磁盘目录替换内嵌控制台（前端开发用） |
 | `SUBREFINE_TRUST_PROXY` | | `false` | 仅在可信反代之后开启：以 `X-Forwarded-For` 识别限流客户端地址 |
+| `SUBREFINE_TEMPLATES` | | 空 | 完整配置模板目录（`singbox.<模式>.json` / `clash.<模式>.yaml`）；未设置则完整模式不可用 |
 
 运行时默认 `GOGC=50`、`GOMEMLIMIT=12MiB`；若已设置同名环境变量则不覆盖。
 
@@ -60,6 +72,7 @@ http://<host>:3000/s/<id>?token=<订阅 token>&target=sing-box
 | `GET` | `/healthz` | 无 | 存活检查 |
 | `GET` | `/s/{id}` | 订阅 token | 分发订阅（`Authorization: Bearer` 或 `?token=`） |
 | `GET` | `/api/admin/info` | 管理令牌 | 版本、监听地址、订阅统计 |
+| `GET` | `/api/admin/templates` | 管理令牌 | 已加载的完整配置模式列表（供控制台选择器） |
 | `GET` | `/api/admin/subscriptions` | 管理令牌 | 订阅列表 |
 | `POST` | `/api/admin/subscriptions` | 管理令牌 | 新建或覆盖订阅 |
 | `DELETE` | `/api/admin/subscriptions/{id}` | 管理令牌 | 删除订阅 |
