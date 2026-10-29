@@ -60,12 +60,23 @@ export interface PipelineStep {
   order?: 'asc' | 'desc'
 }
 
-/** One delivery credential: its own link plus an optional node blacklist. */
-export interface SubKey {
+/** A global delivery credential, shared by any number of subscriptions. */
+export interface DeliveryKey {
   id: string
   name: string
-  /** Empty means "generate on save" (server-side crypto/rand). */
   token: string
+  created_at: number
+  updated_at: number
+}
+
+/** Admin view of a key plus the subscription ids attaching it. */
+export interface AdminKey extends DeliveryKey {
+  in_use: string[]
+}
+
+/** Attaches a global key to a subscription; the blacklist is per pair. */
+export interface SubKeyRef {
+  id: string
   /** ProxyNode identity hashes withheld from this key's deliveries. */
   disabled?: string[]
 }
@@ -73,9 +84,9 @@ export interface SubKey {
 export interface Subscription {
   id: string
   name: string
+  /** Mirrors the first attached key's token (kept in sync by the server). */
   token: string
-  /** Delivery keys; the legacy single token is keys[0]. */
-  keys?: SubKey[]
+  keys?: SubKeyRef[]
   sources: string[]
   pipeline: PipelineStep[]
   enabled: boolean

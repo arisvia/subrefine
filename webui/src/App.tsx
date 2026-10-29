@@ -2,25 +2,29 @@ import { type Component, type JSX, For, Show, createSignal, onMount, onCleanup, 
 import { HashRouter, Route, A, useLocation } from '@solidjs/router'
 import { useAuthStore } from './stores/auth'
 import { useSubscriptionsStore } from './stores/subscriptions'
+import { useKeysStore } from './stores/keys'
 import { ThemeToggle, LanguageToggle } from './components/layout/Sidebar'
 import { useI18n } from './i18n'
 import {
   ToastHost, ConfirmDialogHost, SubrefineLogo, Skeleton, Button, IconButton, BackToTop, Badge,
-  IconHome, IconLayers, IconSettings, IconClose, IconMenu, IconLogout, IconZap,
+  IconHome, IconLayers, IconKey, IconSettings, IconClose, IconMenu, IconLogout, IconZap,
 } from './components/ui'
 import { LoginModal } from './components/layout/LoginModal'
 import Home from './pages/Home'
 const Subscriptions = lazy(() => import('./pages/Subscriptions'))
+const Keys = lazy(() => import('./pages/Keys'))
 const Settings = lazy(() => import('./pages/Settings'))
 
 const NavIcons = {
   overview: () => <IconHome class="w-4 h-4 shrink-0" />,
   subscriptions: () => <IconLayers class="w-4 h-4 shrink-0" />,
+  keys: () => <IconKey class="w-4 h-4 shrink-0" />,
 }
 
 const App: Component = () => {
   const auth = useAuthStore()
   const subs = useSubscriptionsStore()
+  const keysPool = useKeysStore()
   const { t } = useI18n()
   const [open, setOpen] = createSignal(false)
 
@@ -32,7 +36,10 @@ const App: Component = () => {
 
   // Reload the list whenever the session becomes valid (login, token re-entry).
   createEffect(() => {
-    if (auth.authenticated()) void subs.load(true)
+    if (auth.authenticated()) {
+      void subs.load(true)
+      void keysPool.load()
+    }
   })
 
   // The static index.html ships the zh title; keep the browser tab honest
@@ -48,6 +55,7 @@ const App: Component = () => {
     const pageTitle = () => {
       const titles = {
         subscriptions: 'nav.subscriptions',
+        keys: 'nav.keys',
         settings: 'nav.settings',
       } as const
       const route = location.pathname.split('/')[1] as keyof typeof titles
@@ -241,6 +249,7 @@ const App: Component = () => {
     <HashRouter root={Layout}>
       <Route path="/" component={Home} />
       <Route path="/subscriptions" component={Subscriptions} />
+      <Route path="/keys" component={Keys} />
       <Route path="/settings" component={Settings} />
       <Route path="*" component={Home} />
     </HashRouter>
@@ -255,6 +264,7 @@ function SidebarNav(props: { onNavigate?: () => void }) {
       items: [
         { href: '/', label: t('nav.overview'), end: true, icon: NavIcons.overview },
         { href: '/subscriptions', label: t('nav.subscriptions'), icon: NavIcons.subscriptions },
+        { href: '/keys', label: t('nav.keys'), icon: NavIcons.keys },
       ],
     },
     {

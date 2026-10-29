@@ -8,9 +8,9 @@
 - WireGuard 说明：sing-box 1.13.0 起移除了 wireguard 出站（新式 `endpoints` 是启动隧道，非按节点可选代理），因此 **sing-box 格式不携带 WG 节点**，并在响应头 `X-Subrefine-Skipped: wireguard=N` 与服务日志中显式声明；Clash.Meta 与 URI 格式仍完整下发 WG。产物均以 sing-box 1.14.4 / Mihomo v1.19.33 的官方解析器实测通过。
 - 管线算子：过滤、正则重命名、特征去重、属性修饰（uTLS 指纹 / detour）、排序
 - 内嵌 Web 控制台（SolidJS + Tailwind，`//go:embed` 打进同一个二进制）
-- 双层鉴权：管理端 Bearer 令牌 + 每条订阅独立 token，均为恒定时间比较
+- 双层鉴权：管理端 Bearer 令牌 + 全局下发密钥池，均为恒定时间比较
 - 账号状态透传：抓取上游 `subscription-userinfo` / `profile-update-interval` 响应头，下发时原样回吐，客户端即可显示到期时间与剩余流量；多账号合并时用量累加、到期取最早、刷新间隔取最短，控制台同时按源展示各自数字（与节点管线解耦，过滤节点不影响用量显示）
-- 多密钥下发：一条订阅可挂多个 token（每人/每设备一条链接），并针对单个密钥屏蔽指定节点（按连接指纹的稳定 ID，重命名不掉、上游真变了自动失效）；旧单 token 数据自动迁移为首个密钥，已发出的链接不失效
+- 全局密钥下发：密钥独立管理（「密钥」页新建/重命名/轮换/删除），订阅只挂接引用；同一密钥可服务多个订阅（每人/每设备一条凭据），屏蔽节点按「订阅 × 密钥」对独立生效（按连接指纹的稳定 ID，重命名不掉、上游真变了自动失效）；旧版内嵌密钥与单 token 数据启动时自动迁移为全局密钥，token 原样保留、已发出的链接不失效
 
 | | subrefine | Node.js Sub-Store |
 |---|---|---|
@@ -36,7 +36,7 @@ http://<host>:3000/s/<id>?token=<订阅 token>&target=sing-box&mode=tun   # 完�
 
 `target` 可取 `sing-box` / `clash` / `uri`；未显式指定时按 User-Agent 识别 sing-box 与 Clash/Mihomo，其余回落到 Base64 URI。
 
-一条订阅的每个下发密钥都是独立链接：`token=` 换成该密钥的 token 即可；密钥留空 token 保存时由服务器生成（`crypto/rand`）。节点屏蔽在控制台的「节点开关」里勾选，仅作用于该密钥的下发结果，其余密钥不受影响。
+下发凭据是全局密钥：在控制台「密钥」页新建（token 由服务器 `crypto/rand` 生成），再到订阅编辑器里挂接；一个密钥挂到几个订阅，就有几条能用它的链接。轮换在「密钥」页一键完成（所有引用它的订阅同步换新）；删除被引用的密钥需级联确认，失去唯一密钥的订阅会自动补发新的默认密钥。节点屏蔽在订阅编辑器的「节点开关」里勾选，仅作用于该订阅中该密钥的下发结果，其余密钥与订阅不受影响。
 
 ### 完整配置模板（官方客户端直连订阅 URL）
 
@@ -77,6 +77,10 @@ http://<host>:3000/s/<id>?token=<订阅 token>&target=sing-box&mode=tun   # 完�
 | `GET` | `/s/{id}` | 订阅 token | 分发订阅（`Authorization: Bearer` 或 `?token=`） |
 | `GET` | `/api/admin/info` | 管理令牌 | 版本、监听地址、订阅统计 |
 | `GET` | `/api/admin/templates` | 管理令牌 | 已加载的完整配置模式列表（供控制台选择器） |
+| `GET` | `/api/admin/keys` | 管理令牌 | 全局密钥列表（含每个密钥被哪些订阅挂接） |
+| `POST` | `/api/admin/keys` | 管理令牌 | 新建密钥（token 留空则自动生成） |
+| `PUT` | `/api/admin/keys/{id}` | 管理令牌 | 重命名 / 轮换 token（令牌冲突返回 409） |
+| `DELETE` | `/api/admin/keys/{id}` | 管理令牌 | 删除密钥（被挂接时 409；`?cascade=1` 强制解除挂接） |
 | `GET` | `/api/admin/subscriptions` | 管理令牌 | 订阅列表 |
 | `POST` | `/api/admin/subscriptions` | 管理令牌 | 新建或覆盖订阅 |
 | `DELETE` | `/api/admin/subscriptions/{id}` | 管理令牌 | 删除订阅 |

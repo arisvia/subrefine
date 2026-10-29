@@ -2,13 +2,14 @@ import { type Component, For, Show, createEffect, createMemo, createResource, cr
 import { useI18n } from '@/i18n'
 import { Alert, Button, Checkbox, Field, Input, Modal, Select, Textarea, Toggle } from '@/components/ui'
 import { api } from '@/lib/api'
-import { formatBytes, formatExpiry } from '@/lib/format'
+import { formatBytes, formatExpiry, maskKey } from '@/lib/format'
 import { copyToClipboard } from '@/lib/clipboard'
 import { toast } from '@/lib/toast'
 import { deliveryUrl } from '@/lib/sublinks'
 import { useSubscriptionsStore } from '@/stores/subscriptions'
+import { useKeysStore } from '@/stores/keys'
 import { PipelineEditor } from './PipelineEditor'
-import type { PipelineStep, SubKey, Subscription, TemplateModes } from '@/types/domain'
+import type { PipelineStep, SubKeyRef, Subscription, TemplateModes } from '@/types/domain'
 
 // Mirrors storage.ValidateID (`^[A-Za-z0-9_-]{1,64}$`) — keep the two in sync.
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
@@ -30,14 +31,14 @@ function emptyDraft(): Subscription {
 export const SubscriptionEditor: Component<SubscriptionEditorProps> = props => {
   const { t } = useI18n()
   const subs = useSubscriptionsStore()
+  const keysPool = useKeysStore()
   const [draft, setDraft] = createSignal<Subscription>(emptyDraft())
   const [sourcesText, setSourcesText] = createSignal('')
   const [pipeline, setPipeline] = createSignal<PipelineStep[]>([])
   const [touched, setTouched] = createSignal(false)
-  // Delivery keys; a legacy single-token subscription seeds one row so the
-  // editor always shows at least the primary link.
-  const [keys, setKeys] = createSignal<SubKey[]>([{ id: '', name: 'Default', token: '', disabled: [] }])
-  const [expandedKey, setExpandedKey] = createSignal<number | null>(null)
+  // Attached global keys (references only); credentials live on the Keys page.
+  const [refs, setRefs] = createSignal<SubKeyRef[]>([])
+  const [expandedRef, setExpandedRef] = createSignal<string | null>(null)
 
   createEffect(() => {
     if (!props.open) return
@@ -45,43 +46,44 @@ export const SubscriptionEditor: Component<SubscriptionEditorProps> = props => {
     setDraft({ ...src })
     setSourcesText((src.sources ?? []).join('\n'))
     setPipeline((src.pipeline ?? []).map(s => ({ ...s })))
-    const seeded = (src.keys ?? []).map(k => ({ ...k, disabled: [...(k.disabled ?? [])] }))
-    setKeys(seeded.length ? seeded : [{ id: '', name: 'Default', token: src.token ?? '', disabled: [] }])
-    setExpandedKey(null)
+    setRefs((src.keys ?? []).map(r => ({ id: r.id, disabled: [...(r.disabled ?? [])] })))
+    setExpandedRef(null)
     setTouched(false)
+    void keysPool.load()
   })
 
   // Expanding a key's node list needs the preview; the store dedupes and
   // single-flights it, so calling on every expand is cheap.
   createEffect(() => {
-    const i = expandedKey()
-    if (i !== null && props.initial) void subs.runPreview(props.initial.id)
+    if (expandedRef() !== null && props.initial) void subs.runPreview(props.initial.id)
   })
 
-  const patchKey = (i: number, patch: Partial<SubKey>) =>
-    setKeys(prev => prev.map((k, idx) => (idx === i ? { ...k, ...patch } : k)))
+  const attachable = createMemo(() =>
+    keysPool.keys().filter(k => !refs().some(r => r.id === k.id)))
 
-  const addKey = () =>
-    setKeys(prev => [...prev, { id: '', name: '', token: '', disabled: [] }])
-
-  const removeKey = (i: number) => {
-    setKeys(prev => prev.filter((_, idx) => idx !== i))
-    setExpandedKey(null)
+  const attachKey = (id: string) => {
+    if (!id) return
+    setRefs(prev => [...prev, { id, disabled: [] }])
   }
 
-  const toggleNode = (i: number, identity: string, on: boolean) =>
-    setKeys(prev => prev.map((k, idx) => {
-      if (idx !== i) return k
-      const cur = k.disabled ?? []
-      return { ...k, disabled: on ? cur.filter(d => d !== identity) : [...cur, identity] }
+  const detachKey = (id: string) => {
+    setRefs(prev => prev.filter(r => r.id !== id))
+    if (expandedRef() === id) setExpandedRef(null)
+  }
+
+  const toggleNode = (refId: string, identity: string, on: boolean) =>
+    setRefs(prev => prev.map(r => {
+      if (r.id !== refId) return r
+      const cur = r.disabled ?? []
+      return { ...r, disabled: on ? cur.filter(d => d !== identity) : [...cur, identity] }
     }))
 
-  const copyKeyLink = async (i: number) => {
-    const k = keys()[i]
+  const copyRefLink = async (refId: string) => {
     const id = props.initial?.id ?? draft().id.trim()
-    if (!id || !k?.token.trim()) return
-    if (await copyToClipboard(deliveryUrl(id, k.token.trim(), 'uri'))) {
-      toast.success(t('subs.linkCopied', { target: k.name.trim() || t('subs.keyToken') }))
+    const token = keysPool.byId(refId)?.token
+    if (!id || !token) return
+    if (await copyToClipboard(deliveryUrl(id, token, 'uri'))) {
+      toast.success(t('subs.linkCopied', { target: keysPool.byId(refId)!.name }))
     }
   }
 
@@ -107,9 +109,7 @@ export const SubscriptionEditor: Component<SubscriptionEditorProps> = props => {
     const d = draft()
     if (!d.id.trim()) out.push(t('subs.idRequired'))
     else if (!ID_PATTERN.test(d.id.trim())) out.push(t('subs.idPattern'))
-    if (!keys().length) out.push(t('subs.keysRequired'))
-    const toks = keys().map(k => k.token.trim()).filter(Boolean)
-    if (new Set(toks).size !== toks.length) out.push(t('subs.keyDup'))
+    if (!refs().length) out.push(t('subs.keysRequired'))
     if (!sources().length) out.push(t('subs.sourcesRequired'))
     return out
   })
@@ -120,20 +120,13 @@ export const SubscriptionEditor: Component<SubscriptionEditorProps> = props => {
   const submit = () => {
     setTouched(true)
     if (problems().length) return
-    const payload = keys().map(k => ({
-      ...k,
-      name: k.name.trim(),
-      token: k.token.trim(),
-      disabled: (k.disabled ?? []).filter(Boolean),
-    }))
     props.onSubmit({
       ...draft(),
       id: draft().id.trim(),
       name: draft().name.trim() || draft().id.trim(),
-      // The server syncs the primary token to keys[0] (and generates any
-      // empty tokens); mirror that here so the list updates instantly.
-      keys: payload,
-      token: payload[0]?.token ?? draft().token.trim(),
+      // References only; the server re-syncs the mirrored primary token.
+      keys: refs().map(r => ({ id: r.id, disabled: (r.disabled ?? []).filter(Boolean) })),
+      token: keysPool.byId(refs()[0]?.id ?? '')?.token ?? draft().token.trim(),
       sources: sources(),
       pipeline: pipeline(),
     })
@@ -222,61 +215,60 @@ export const SubscriptionEditor: Component<SubscriptionEditorProps> = props => {
               <div class="text-sm font-medium text-foreground">{t('subs.keys')}</div>
               <div class="text-xs text-faint">{t('subs.keysHint')}</div>
             </div>
-            <Button size="sm" variant="ghost" onClick={addKey}>{t('subs.addKey')}</Button>
+            <div class="w-52 shrink-0">
+              <Select
+                size="sm"
+                value=""
+                options={[
+                  { value: '', label: attachable().length ? t('subs.attachKey') : t('subs.noAttachable') },
+                  ...attachable().map(k => ({ value: k.id, label: k.name })),
+                ]}
+                onChange={attachKey}
+                ariaLabel={t('subs.attachKey')}
+                disabled={!attachable().length}
+              />
+            </div>
           </div>
+          <Show when={!refs().length}>
+            <div class="text-xs text-warning">{t('subs.noKeysYet')}</div>
+          </Show>
           <div class="space-y-2.5">
-            <For each={keys()}>
-              {(k, i) => {
+            <For each={refs()}>
+              {r => {
+                const key = () => keysPool.byId(r.id)
                 const stale = createMemo(() => {
                   const known = new Set(subs.preview(props.initial?.id ?? '').ids)
-                  return (k.disabled ?? []).filter(d => !known.has(d)).length
+                  return (r.disabled ?? []).filter(d => !known.has(d)).length
                 })
                 return (
                   <div class="rounded-control border border-glass-border/60 bg-surface/40 p-2.5 space-y-2">
-                    <div class="flex flex-wrap items-end gap-2">
-                      <div class="min-w-28 flex-1">
-                        <div class="pb-1 text-xs text-muted">{t('subs.keyName')}</div>
-                        <Input
-                          size="sm"
-                          value={k.name}
-                          placeholder={i() === 0 ? t('subs.keyPrimaryName') : t('subs.keyNamePlaceholder', { n: i() + 1 })}
-                          ariaLabel={t('subs.keyName')}
-                          onInput={v => patchKey(i(), { name: v })}
-                        />
-                      </div>
-                      <div class="min-w-40 flex-[2]">
-                        <div class="pb-1 text-xs text-muted">{t('subs.keyToken')}</div>
-                        <Input
-                          size="sm"
-                          class="font-mono"
-                          value={k.token}
-                          placeholder={t('subs.keyGenPlaceholder')}
-                          ariaLabel={t('subs.keyToken')}
-                          onInput={v => patchKey(i(), { token: v })}
-                        />
-                      </div>
-                      <Show when={keys().length > 1}>
-                        <Button size="sm" variant="ghost" onClick={() => removeKey(i())}>{t('subs.removeKey')}</Button>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="text-sm font-medium text-foreground">{key()?.name ?? r.id}</span>
+                      <Show when={key()}>
+                        <span class="text-xs font-mono text-faint">{maskKey(key()!.token)}</span>
                       </Show>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-3 text-xs">
-                      <Show when={editing() && k.token.trim()}>
-                        <button type="button" class="text-accent hover:underline" onClick={() => void copyKeyLink(i())}>
-                          {t('subs.copyKeyLink')}
-                        </button>
-                      </Show>
-                      <button
-                        type="button"
-                        class="text-muted hover:text-foreground"
-                        onClick={() => setExpandedKey(expandedKey() === i() ? null : i())}
-                      >
-                        {t('subs.keyNodes')}
-                        <Show when={(k.disabled ?? []).length}>
-                          <span class="text-warning"> · {t('subs.keyOffCount', { count: (k.disabled ?? []).length })}</span>
+                      <span class="ml-auto flex items-center gap-3 text-xs">
+                        <Show when={editing() && key()}>
+                          <button type="button" class="text-accent hover:underline" onClick={() => void copyRefLink(r.id)}>
+                            {t('subs.copyKeyLink')}
+                          </button>
                         </Show>
-                      </button>
+                        <button
+                          type="button"
+                          class="text-muted hover:text-foreground"
+                          onClick={() => setExpandedRef(expandedRef() === r.id ? null : r.id)}
+                        >
+                          {t('subs.keyNodes')}
+                          <Show when={(r.disabled ?? []).length}>
+                            <span class="text-warning"> · {t('subs.keyOffCount', { count: (r.disabled ?? []).length })}</span>
+                          </Show>
+                        </button>
+                        <Show when={refs().length > 1}>
+                          <Button size="sm" variant="ghost" onClick={() => detachKey(r.id)}>{t('subs.detachKey')}</Button>
+                        </Show>
+                      </span>
                     </div>
-                    <Show when={expandedKey() === i()}>
+                    <Show when={expandedRef() === r.id}>
                       <Show when={editing()} fallback={
                         <div class="border-t border-glass-border/50 pt-2 text-xs text-faint">{t('subs.keyNodesNeedSave')}</div>
                       }>
@@ -298,8 +290,8 @@ export const SubscriptionEditor: Component<SubscriptionEditorProps> = props => {
                                 <For each={p.nodes.map((n, idx) => ({ tag: n.tag, type: n.type, id: p.ids[idx] ?? '' }))}>
                                   {item => (
                                     <Checkbox
-                                      checked={item.id !== '' && !(k.disabled ?? []).includes(item.id)}
-                                      onChange={v => toggleNode(i(), item.id, v)}
+                                      checked={item.id !== '' && !(r.disabled ?? []).includes(item.id)}
+                                      onChange={v => toggleNode(r.id, item.id, v)}
                                       label={
                                         <span class="text-xs">
                                           <span class="text-foreground">{item.tag}</span>{' '}
