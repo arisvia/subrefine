@@ -11,7 +11,6 @@ import (
 	"github.com/arisvia/subrefine/internal/config"
 	"github.com/arisvia/subrefine/internal/core/emitter"
 	"github.com/arisvia/subrefine/internal/core/model"
-	"github.com/arisvia/subrefine/internal/storage"
 )
 
 // fakeRegistry serves the real template machinery without touching disk.
@@ -83,8 +82,6 @@ func newFullModeServer(t *testing.T) http.Handler {
 		expectedID:    "sub1",
 		expectedToken: "tok123",
 		nodes:         fullTestNodes(),
-		sbMode:        "tun",
-		clMode:        "tun",
 	}
 	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "adm"}
 	return api.NewServer(cfg, mock, nil, fullTestRegistry(t)).Handler()
@@ -94,7 +91,7 @@ func TestSingboxFullDelivery(t *testing.T) {
 	h := newFullModeServer(t)
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=sing-box", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=sing-box&mode=tun", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
@@ -118,7 +115,13 @@ func TestSingboxFullDelivery(t *testing.T) {
 		t.Fatal("marker leaked")
 	}
 
-	// URL mode overrides the saved mode; off forces the fragment back.
+	// Without a mode parameter the fragment is the default: nothing is bound
+	// to the subscription; mode=off is the explicit fragment choice.
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=sing-box", nil))
+	if rec.Header().Get("X-Subrefine-Full") != "" || strings.Contains(rec.Body.String(), `"route"`) {
+		t.Fatalf("bare delivery must serve the fragment: %s", rec.Body.String())
+	}
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=sing-box&mode=off", nil))
 	if rec.Header().Get("X-Subrefine-Full") != "" || strings.Contains(rec.Body.String(), `"route"`) {
@@ -137,7 +140,7 @@ func TestClashFullDelivery(t *testing.T) {
 	h := newFullModeServer(t)
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=clash", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=clash&mode=tun", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -152,58 +155,14 @@ func TestClashFullDelivery(t *testing.T) {
 }
 
 func TestFullDeliveryEmptyNodes(t *testing.T) {
-	mock := &mockSubManager{expectedID: "sub1", expectedToken: "tok123", sbMode: "tun"}
+	mock := &mockSubManager{expectedID: "sub1", expectedToken: "tok123"}
 	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "adm"}
 	h := api.NewServer(cfg, mock, nil, fullTestRegistry(t)).Handler()
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=sing-box", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/sub1?token=tok123&target=sing-box&mode=tun", nil))
 	if rec.Code != http.StatusOK || rec.Header().Get("X-Subrefine-Full") != "empty-nodes" {
 		t.Fatalf("empty nodes: %d header=%q", rec.Code, rec.Header().Get("X-Subrefine-Full"))
-	}
-}
-
-func TestSaveRejectsUnknownFullMode(t *testing.T) {
-	store, err := storage.New(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg := &config.Config{Host: "127.0.0.1", Port: 3000, AdminToken: "adm"}
-	h := api.NewServer(cfg, &mockSubManager{}, store, fullTestRegistry(t)).Handler()
-
-	post := func(body string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodPost, "/api/admin/subscriptions", strings.NewReader(body))
-		req.Header.Set("Authorization", "Bearer adm")
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, req)
-		return rec
-	}
-
-	if rec := post(`{"id":"a","token":"t","sources":[],"singbox_mode":"nope"}`); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "nope") {
-		t.Fatalf("unknown mode must be rejected at save: %d %s", rec.Code, rec.Body.String())
-	}
-	// Case-insensitive input normalises onto the registered mode.
-	if rec := post(`{"id":"a","token":"t","sources":[],"singbox_mode":"TUN","clash_mode":"tun"}`); rec.Code != http.StatusOK {
-		t.Fatalf("valid modes rejected: %d %s", rec.Code, rec.Body.String())
-	}
-	saved, err := store.Get("a")
-	if err != nil || saved.SingboxMode != "tun" || saved.ClashMode != "tun" {
-		t.Fatalf("saved modes wrong: %+v %v", saved, err)
-	}
-	// Templates configured but the subscription asks for a clash mode that
-	// exists: fine; empty modes always fine.
-	if rec := post(`{"id":"b","token":"t","sources":[]}`); rec.Code != http.StatusOK {
-		t.Fatalf("plain save blocked: %d %s", rec.Code, rec.Body.String())
-	}
-
-	// No registry at all: any non-empty mode is refused with a clear reason.
-	bare := api.NewServer(cfg, &mockSubManager{}, store, nil).Handler()
-	req := httptest.NewRequest(http.MethodPost, "/api/admin/subscriptions", strings.NewReader(`{"id":"c","token":"t","sources":[],"clash_mode":"tun"}`))
-	req.Header.Set("Authorization", "Bearer adm")
-	rec := httptest.NewRecorder()
-	bare.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "SUBREFINE_TEMPLATES") {
-		t.Fatalf("no-registry save: %d %s", rec.Code, rec.Body.String())
 	}
 }
 

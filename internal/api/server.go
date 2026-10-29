@@ -40,8 +40,6 @@ type SubManager interface {
 	// subscription's nodes (which include credentials) are not held until the TTL
 	// lapses.
 	Invalidate(id string)
-	// FullModes reports the subscription's saved full-config template modes.
-	FullModes(id string) (singbox, clash string)
 	// UserInfo returns the merged account metadata (expiry/traffic) plus the
 	// per-source breakdown; all nil when no upstream reported any.
 	UserInfo(id string) (*model.SubscriptionInfo, []*model.SourceInfo, error)
@@ -166,10 +164,6 @@ func (s *Server) handleAdminSaveSubscription(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err := pipeline.ValidateSteps(sub.Pipeline); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err := s.validateFullModes(&sub); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -335,8 +329,7 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Subrefine-Skipped", "wireguard="+strconv.Itoa(len(skipped)))
 			log.Printf("[subrefine] %s: sing-box target dropped %d wireguard node(s) (no wireguard outbound since sing-box 1.13); clash and uri targets still carry them", subID, len(skipped))
 		}
-		sbMode, _ := s.subManager.FullModes(subID)
-		if mode := resolveFullMode(r, sbMode); mode != "" {
+		if mode := resolveFullMode(r); mode != "" {
 			var tmpl *emitter.SingboxTemplate
 			if s.templates != nil {
 				tmpl = s.templates.SingboxTemplate(mode)
@@ -371,8 +364,7 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		w.Write(data)
 
 	case TargetClash:
-		_, clMode := s.subManager.FullModes(subID)
-		if mode := resolveFullMode(r, clMode); mode != "" {
+		if mode := resolveFullMode(r); mode != "" {
 			var tmpl *emitter.ClashFullTemplate
 			if s.templates != nil {
 				tmpl = s.templates.ClashTemplate(mode)

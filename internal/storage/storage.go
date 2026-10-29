@@ -65,19 +65,13 @@ type Subscription struct {
 	Name string `json:"name"`
 	// Token mirrors the first attached key's token, kept in sync by the store.
 	// Delivery authenticates against every attached key, not just this one.
-	Token    string         `json:"token"`
-	Keys     []SubKeyRef    `json:"keys,omitempty"`
-	Sources  []string       `json:"sources"` // URLs or local nodes
-	Pipeline []PipelineStep `json:"pipeline"`
-	Enabled  bool           `json:"enabled"`
-	// SingboxMode/ClashMode name a full-config template mode (tun, tproxy,
-	// mixed, ...) served to that target instead of the plain fragment.
-	// Empty means fragment; the console lists loadable modes from the
-	// server's template directory.
-	SingboxMode string `json:"singbox_mode,omitempty"`
-	ClashMode   string `json:"clash_mode,omitempty"`
-	CreatedAt   int64  `json:"created_at"`
-	UpdatedAt   int64  `json:"updated_at"`
+	Token     string         `json:"token"`
+	Keys      []SubKeyRef    `json:"keys,omitempty"`
+	Sources   []string       `json:"sources"` // URLs or local nodes
+	Pipeline  []PipelineStep `json:"pipeline"`
+	Enabled   bool           `json:"enabled"`
+	CreatedAt int64          `json:"created_at"`
+	UpdatedAt int64          `json:"updated_at"`
 }
 
 // legacyKey is the pre-global wire shape: keys embedded in the subscription

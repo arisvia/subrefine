@@ -81,17 +81,6 @@ func NewManager(store *storage.Store, f *fetcher.Fetcher, cacheTTL time.Duration
 	}
 }
 
-// FullModes reports the per-subscription full-config template modes
-// (sing-box, clash). Missing or unreadable subscriptions read as empty:
-// the fragment target is always the safe default.
-func (m *Manager) FullModes(id string) (singbox, clash string) {
-	sub, err := m.store.Get(id)
-	if err != nil {
-		return "", ""
-	}
-	return sub.SingboxMode, sub.ClashMode
-}
-
 // GetSubscription fetches, pipelines, and returns the full node set for a
 // subscription, authenticating the token against the global delivery-key pool.
 // Callers that miss the cache wait on whoever else is already building the same

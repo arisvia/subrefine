@@ -4,7 +4,7 @@
 
 - 解析并归一化 SS / SS2022 / VMess / VLESS (Reality·Vision·gRPC·WS) / Trojan / Hysteria2 / WireGuard
 - 按客户端下发对应格式：sing-box JSON、Clash.Meta (Mihomo) YAML、Base64 URI
-- 完整配置分发：以官方 schema 分流模板为骨架、节点原地注入（`@subrefine` 标记 + 正则分组），官方 sing-box / mihomo 客户端可直接加载订阅 URL；tun / tproxy / mixed 多模式，订阅级开关 + URL 覆盖
+- 完整配置分发：以官方 schema 分流模板为骨架、节点原地注入（`@subrefine` 标记 + 正则分组），官方 sing-box / mihomo 客户端可直接加载订阅 URL；tun / tproxy / mixed 多模式，在输出弹窗按需选择并烘焙进链接（URL `&mode=`），不在订阅上绑死
 - WireGuard 说明：sing-box 1.13.0 起移除了 wireguard 出站（新式 `endpoints` 是启动隧道，非按节点可选代理），因此 **sing-box 格式不携带 WG 节点**，并在响应头 `X-Subrefine-Skipped: wireguard=N` 与服务日志中显式声明；Clash.Meta 与 URI 格式仍完整下发 WG。产物均以 sing-box 1.14.4 / Mihomo v1.19.33 的官方解析器实测通过。
 - 管线算子：过滤、正则重命名、特征去重、属性修饰（uTLS 指纹 / detour）、排序
 - 内嵌 Web 控制台（SolidJS + Tailwind，`//go:embed` 打进同一个二进制）
@@ -40,7 +40,7 @@ http://<host>:3000/s/<id>?token=<订阅 token>&target=sing-box&mode=tun   # 完�
 
 ### 完整配置模板（官方客户端直连订阅 URL）
 
-官方 sing-box 没有订阅/provider 概念，客户端加载 URL 必须拿到**整套可运行配置**。配置 `SUBREFINE_TEMPLATES=<目录>` 后，每个订阅可为两个目标各选一个模板模式（控制台开关，或 URL `&mode=<模式>` 临时覆盖，`&mode=off` 强制回退片段）：
+官方 sing-box 没有订阅/provider 概念，客户端加载 URL 必须拿到**整套可运行配置**。配置 `SUBREFINE_TEMPLATES=<目录>` 后，模式通过 URL 选择（`&mode=<模式>`，`&mode=off`/无参数回退片段）——控制台订阅卡片的「订阅链接」弹窗会按所选平台列出可用模式并把结果烘焙进链接，模式不存储在订阅上：
 
 - 目录内命名即注册：`singbox.<模式>.json`、`clash.<模式>.yaml`（示例见 `templates.example/`，常用模式命名 `tun` / `tproxy` / `mixed`，实际不限）；
 - 模板是纯官方 schema 骨架（log/dns/inbounds/route/分组），`@subrefine` 为注入标记：`outbounds`/`proxies` 里 `{"tag":"@subrefine"}` 处原地替换为节点出站；分组引用 `@subrefine` 展开为全部节点，`@subrefine:(?i)(HK|港)` 按正则挑选（无匹配回退全量，避免空分组被客户端拒载）；

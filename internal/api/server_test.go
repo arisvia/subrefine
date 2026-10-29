@@ -23,8 +23,6 @@ type mockSubManager struct {
 	info          *model.SubscriptionInfo
 	sources       []*model.SourceInfo
 	invalidated   []string
-	sbMode        string
-	clMode        string
 }
 
 func (m *mockSubManager) GetSubscription(id string, token string) ([]*model.ProxyNode, error) {
@@ -45,10 +43,6 @@ func (m *mockSubManager) Resolve(id, token string) (*storage.Subscription, *stor
 
 func (m *mockSubManager) Invalidate(id string) {
 	m.invalidated = append(m.invalidated, id)
-}
-
-func (m *mockSubManager) FullModes(id string) (string, string) {
-	return m.sbMode, m.clMode
 }
 
 func (m *mockSubManager) UserInfo(id string) (*model.SubscriptionInfo, []*model.SourceInfo, error) {
