@@ -20,6 +20,8 @@ type mockSubManager struct {
 	expectedToken string
 	nodes         []*model.ProxyNode
 	disabled      []string // per-key blacklist the mock's Resolve key carries
+	info          *model.SubscriptionInfo
+	sources       []*model.SourceInfo
 	invalidated   []string
 	sbMode        string
 	clMode        string
@@ -47,6 +49,13 @@ func (m *mockSubManager) Invalidate(id string) {
 
 func (m *mockSubManager) FullModes(id string) (string, string) {
 	return m.sbMode, m.clMode
+}
+
+func (m *mockSubManager) UserInfo(id string) (*model.SubscriptionInfo, []*model.SourceInfo, error) {
+	if id != m.expectedID {
+		return nil, nil, errors.New("not found")
+	}
+	return m.info, m.sources, nil
 }
 
 func TestAPIServer(t *testing.T) {

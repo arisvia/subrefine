@@ -260,9 +260,12 @@ func TestBase64SubscriptionAndFetcher(t *testing.T) {
 	defer ts.Close()
 
 	f := fetcher.New(5 * time.Second)
-	fetchedNodes, err := f.FetchSubscription(t.Context(), ts.URL, "custom-ua")
+	fetchedNodes, info, err := f.FetchSubscription(t.Context(), ts.URL, "custom-ua")
 	if err != nil {
 		t.Fatalf("FetchSubscription failed: %v", err)
+	}
+	if info != nil {
+		t.Fatalf("no userinfo headers were sent, got %+v", info)
 	}
 
 	if len(fetchedNodes) != len(orig) {

@@ -18,8 +18,10 @@ import (
 
 // keyMock authenticates several delivery tokens, each with its own blacklist.
 type keyMock struct {
-	nodes []*model.ProxyNode
-	keys  map[string]*storage.SubKey
+	nodes   []*model.ProxyNode
+	keys    map[string]*storage.SubKey
+	info    *model.SubscriptionInfo
+	sources []*model.SourceInfo
 }
 
 func (m *keyMock) GetSubscription(id, token string) ([]*model.ProxyNode, error) {
@@ -40,6 +42,9 @@ func (m *keyMock) Resolve(id, token string) (*storage.Subscription, *storage.Sub
 func (m *keyMock) Invalidate(string) {}
 func (m *keyMock) FullModes(string) (string, string) {
 	return "", ""
+}
+func (m *keyMock) UserInfo(string) (*model.SubscriptionInfo, []*model.SourceInfo, error) {
+	return m.info, m.sources, nil
 }
 
 // Different tokens must deliver different node sets: the per-key blacklist is

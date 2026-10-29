@@ -29,6 +29,10 @@ type cacheItem struct {
 	// from, so editing sources or the pipeline takes effect on the next request
 	// instead of waiting out the TTL.
 	def string
+	// info is the merged account metadata (expiry/traffic) of the same fetch;
+	// sources keeps each upstream's own numbers for the console.
+	info    *model.SubscriptionInfo
+	sources []*model.SourceInfo
 }
 
 // fingerprint covers ONLY the node-affecting definition. Key edits (names,
@@ -196,18 +200,31 @@ func (m *Manager) Invalidate(id string) {
 }
 
 // build fetches every source, applies the pipeline, and republishes the cache.
+// Account metadata (expiry/traffic) is gathered per source and merged; it is
+// independent of the node pipeline, so filtering nodes never hides the usage.
 func (m *Manager) build(sub *storage.Subscription, fp string) ([]*model.ProxyNode, error) {
 	var collected []*model.ProxyNode
+	var infos []*model.SubscriptionInfo
+	var sources []*model.SourceInfo
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	for _, src := range sub.Sources {
-		nodes, err := m.fetchSource(ctx, src)
-		if err == nil && len(nodes) > 0 {
+		nodes, info, err := m.fetchSource(ctx, src)
+		if err != nil {
+			continue
+		}
+		if len(nodes) > 0 {
 			collected = append(collected, nodes...)
+		}
+		if info != nil {
+			infos = append(infos, info)
+			si := model.SourceInfo{Source: src, SubscriptionInfo: *info}
+			sources = append(sources, &si)
 		}
 	}
 
+	merged := model.MergeSubscriptionInfos(infos)
 	processed := m.applyPipeline(collected, sub.Pipeline)
 
 	// Replace this entry and drop anything no longer reachable or usable.
@@ -229,13 +246,34 @@ func (m *Manager) build(sub *storage.Subscription, fp string) ([]*model.ProxyNod
 		nodes:     processed,
 		fetchedAt: time.Now(),
 		def:       fp,
+		info:      merged,
+		sources:   sources,
 	}
 	m.cacheMu.Unlock()
 
 	return processed, nil
 }
 
-func (m *Manager) fetchSource(ctx context.Context, src string) ([]*model.ProxyNode, error) {
+// UserInfo returns the merged account metadata and the per-source breakdown
+// for a subscription, building it (via the same singleflight as the node set)
+// if it is not cached. Both are nil when no upstream reported any.
+func (m *Manager) UserInfo(id string) (*model.SubscriptionInfo, []*model.SourceInfo, error) {
+	sub, err := m.store.Get(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := m.nodes(sub); err != nil {
+		return nil, nil, err
+	}
+	m.cacheMu.RLock()
+	defer m.cacheMu.RUnlock()
+	if it, ok := m.cache[id]; ok {
+		return it.info, it.sources, nil
+	}
+	return nil, nil, nil
+}
+
+func (m *Manager) fetchSource(ctx context.Context, src string) ([]*model.ProxyNode, *model.SubscriptionInfo, error) {
 	switch {
 	case strings.HasPrefix(src, "http://"), strings.HasPrefix(src, "https://"):
 		return m.fetcher.FetchSubscription(ctx, src, "")
@@ -243,9 +281,9 @@ func (m *Manager) fetchSource(ctx context.Context, src string) ([]*model.ProxyNo
 		// Inline payload: single URI, base64 blob, Clash YAML or sing-box JSON fragment.
 		nodes, err := parser.ParseSubscription([]byte(src))
 		if err == nil && len(nodes) > 0 {
-			return nodes, nil
+			return nodes, nil, nil
 		}
-		return nil, fmt.Errorf("unrecognized source: %s", src)
+		return nil, nil, fmt.Errorf("unrecognized source: %s", src)
 	}
 }
 

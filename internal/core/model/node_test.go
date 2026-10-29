@@ -66,3 +66,27 @@ func tags(ns []*model.ProxyNode) []string {
 	}
 	return out
 }
+
+func TestMergeSubscriptionInfos(t *testing.T) {
+	// Usage sums, expiry takes the earliest, interval the shortest.
+	got := model.MergeSubscriptionInfos([]*model.SubscriptionInfo{
+		{Upload: 10, Download: 20, Total: 1000, Expire: 500, UpdateInterval: 24, Reported: true},
+		{Upload: 5, Download: 5, Total: 2000, Expire: 300, UpdateInterval: 12, Reported: true},
+		nil,
+		{Reported: false},
+		// Reports but has no expiry at all: must not drag the minimum to 0.
+		{Upload: 1, Download: 1, Reported: true},
+	})
+	if got == nil {
+		t.Fatal("expected merged info")
+	}
+	want := model.SubscriptionInfo{Upload: 16, Download: 26, Total: 3000, Expire: 300, UpdateInterval: 12, Reported: true}
+	if *got != want {
+		t.Fatalf("merged %+v want %+v", *got, want)
+	}
+
+	// Nobody reported: nothing to deliver.
+	if model.MergeSubscriptionInfos([]*model.SubscriptionInfo{{Reported: false}, nil}) != nil {
+		t.Fatal("silent upstreams must merge to nil")
+	}
+}

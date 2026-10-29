@@ -37,6 +37,9 @@ type SubManager interface {
 	Invalidate(id string)
 	// FullModes reports the subscription's saved full-config template modes.
 	FullModes(id string) (singbox, clash string)
+	// UserInfo returns the merged account metadata (expiry/traffic) plus the
+	// per-source breakdown; all nil when no upstream reported any.
+	UserInfo(id string) (*model.SubscriptionInfo, []*model.SourceInfo, error)
 }
 
 // TemplateRegistry supplies the startup-loaded full-config templates.
@@ -248,12 +251,16 @@ func (s *Server) handleAdminPreviewNodes(w http.ResponseWriter, r *http.Request)
 		ids[i] = n.Identity()
 	}
 
+	info, sources, _ := s.subManager.UserInfo(id)
+
 	json.NewEncoder(w).Encode(map[string]any{
-		"id":    id,
-		"count": len(nodes),
-		"nodes": nodes,
-		"uris":  uris,
-		"ids":   ids,
+		"id":       id,
+		"count":    len(nodes),
+		"nodes":    nodes,
+		"uris":     uris,
+		"ids":      ids,
+		"userinfo": info,
+		"sources":  sources,
 	})
 }
 
@@ -299,6 +306,19 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	// Per-key blacklist: the shared upstream cache keeps the full set; only
 	// this delivery drops withheld nodes.
 	nodes = model.FilterDisabled(nodes, key.Disabled)
+
+	// Re-emit the airport's account metadata so clients show expiry/traffic.
+	// Usage is account-level, so the merged view is served to every key.
+	if info, _, err := s.subManager.UserInfo(subID); err == nil && info != nil {
+		w.Header().Set("subscription-userinfo",
+			"upload="+strconv.FormatInt(info.Upload, 10)+
+				"; download="+strconv.FormatInt(info.Download, 10)+
+				"; total="+strconv.FormatInt(info.Total, 10)+
+				"; expire="+strconv.FormatInt(info.Expire, 10))
+		if info.UpdateInterval > 0 {
+			w.Header().Set("profile-update-interval", strconv.Itoa(info.UpdateInterval))
+		}
+	}
 
 	target := DetectTarget(r)
 
