@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/arisvia/subrefine/internal/auth"
 	"github.com/arisvia/subrefine/internal/core/fetcher"
 	"github.com/arisvia/subrefine/internal/core/model"
 	"github.com/arisvia/subrefine/internal/core/parser"
@@ -32,8 +31,14 @@ type cacheItem struct {
 	def string
 }
 
+// fingerprint covers ONLY the node-affecting definition. Key edits (names,
+// tokens, disabled lists) must not force an upstream re-fetch - they filter
+// the cached node set at request time instead.
 func fingerprint(sub *storage.Subscription) string {
-	data, err := json.Marshal(sub)
+	data, err := json.Marshal(struct {
+		Sources  []string               `json:"sources"`
+		Pipeline []storage.PipelineStep `json:"pipeline"`
+	}{sub.Sources, sub.Pipeline})
 	if err != nil {
 		return strconv.FormatInt(time.Now().UnixNano(), 10)
 	}
@@ -83,7 +88,8 @@ func (m *Manager) FullModes(id string) (singbox, clash string) {
 	return sub.SingboxMode, sub.ClashMode
 }
 
-// GetSubscription fetches, pipelines, and returns the nodes for a subscription.
+// GetSubscription fetches, pipelines, and returns the full node set for a
+// subscription, authenticating the token against any of its delivery keys.
 // Callers that miss the cache wait on whoever else is already building the same
 // subscription instead of re-fetching every upstream source.
 func (m *Manager) GetSubscription(id string, token string) ([]*model.ProxyNode, error) {
@@ -91,15 +97,42 @@ func (m *Manager) GetSubscription(id string, token string) ([]*model.ProxyNode, 
 	if err != nil {
 		return nil, err
 	}
-
-	if !auth.ValidateSubToken(token, sub.Token) {
+	if sub.FindKey(token) == nil {
 		return nil, ErrUnauthorized
 	}
-
 	if !sub.Enabled {
 		return nil, ErrDisabled
 	}
+	return m.nodes(sub)
+}
 
+// Resolve authenticates the token against the subscription's delivery keys and
+// returns the matching key plus the full (unfiltered) node set. The caller
+// applies key.Disabled per request, so per-key blacklists never poison or
+// re-fetch the shared upstream cache.
+func (m *Manager) Resolve(id, token string) (*storage.Subscription, *storage.SubKey, []*model.ProxyNode, error) {
+	sub, err := m.store.Get(id)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	key := sub.FindKey(token)
+	if key == nil {
+		return nil, nil, nil, ErrUnauthorized
+	}
+	if !sub.Enabled {
+		return nil, nil, nil, ErrDisabled
+	}
+	nodes, err := m.nodes(sub)
+	if err != nil {
+		return sub, key, nil, err
+	}
+	return sub, key, nodes, nil
+}
+
+// nodes returns the cached full node set, building it under singleflight on a
+// miss.
+func (m *Manager) nodes(sub *storage.Subscription) ([]*model.ProxyNode, error) {
+	id := sub.ID
 	fp := fingerprint(sub)
 	m.cacheMu.RLock()
 	item, ok := m.cache[id]

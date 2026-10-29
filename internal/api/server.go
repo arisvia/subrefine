@@ -27,6 +27,10 @@ type SubStorage interface {
 // SubManager is the interface for retrieving subscription nodes and verifying sub tokens.
 type SubManager interface {
 	GetSubscription(id string, token string) ([]*model.ProxyNode, error)
+	// Resolve authenticates a delivery token against the subscription's keys
+	// and returns the matching key with the full node set; callers apply
+	// key.Disabled per request.
+	Resolve(id, token string) (*storage.Subscription, *storage.SubKey, []*model.ProxyNode, error)
 	// Invalidate drops cached delivery results for a subscription, so a deleted
 	// subscription's nodes (which include credentials) are not held until the TTL
 	// lapses.
@@ -157,6 +161,14 @@ func (s *Server) handleAdminSaveSubscription(w http.ResponseWriter, r *http.Requ
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := sub.Normalize(); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to prepare delivery keys")
+		return
+	}
+	if dup := sub.DuplicateTokenID(); dup != "" {
+		writeJSONError(w, http.StatusBadRequest, "two delivery keys share the same token")
+		return
+	}
 	if err := s.storage.Save(&sub); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "save failed: "+err.Error())
 		return
@@ -226,10 +238,14 @@ func (s *Server) handleAdminPreviewNodes(w http.ResponseWriter, r *http.Request)
 	// uris is index-aligned with nodes: the shareable client link for each node,
 	// empty when that node cannot be encoded as a URI.
 	uris := make([]string, len(nodes))
+	// ids is index-aligned with nodes: the stable per-node identity the console
+	// records in a key's disabled list.
+	ids := make([]string, len(nodes))
 	for i, n := range nodes {
 		if uri, err := emitter.ToURI(n); err == nil {
 			uris[i] = uri
 		}
+		ids[i] = n.Identity()
 	}
 
 	json.NewEncoder(w).Encode(map[string]any{
@@ -237,6 +253,7 @@ func (s *Server) handleAdminPreviewNodes(w http.ResponseWriter, r *http.Request)
 		"count": len(nodes),
 		"nodes": nodes,
 		"uris":  uris,
+		"ids":   ids,
 	})
 }
 
@@ -274,11 +291,14 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	nodes, err := s.subManager.GetSubscription(subID, token)
+	_, key, nodes, err := s.subManager.Resolve(subID, token)
 	if err != nil {
 		http.Error(w, `{"error":"invalid subscription or token"}`, http.StatusForbidden)
 		return
 	}
+	// Per-key blacklist: the shared upstream cache keeps the full set; only
+	// this delivery drops withheld nodes.
+	nodes = model.FilterDisabled(nodes, key.Disabled)
 
 	target := DetectTarget(r)
 

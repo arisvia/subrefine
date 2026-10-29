@@ -3,7 +3,6 @@ package pipeline
 import (
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/arisvia/subrefine/internal/core/model"
@@ -116,11 +115,7 @@ func Deduplicate(nodes []*model.ProxyNode) []*model.ProxyNode {
 	out := make([]*model.ProxyNode, 0, len(nodes))
 
 	for _, n := range nodes {
-		sig := strings.Join([]string{
-			n.Type, n.Server, strconv.Itoa(n.Port),
-			n.UUID, n.Password, n.Method, n.Path,
-			n.PrivateKey, n.PeerPubKey, n.PreSharedKey, n.ObfsPass,
-		}, "|")
+		sig := n.Identity()
 		if seen[sig] {
 			continue
 		}

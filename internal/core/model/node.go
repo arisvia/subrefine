@@ -1,5 +1,12 @@
 package model
 
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strconv"
+	"strings"
+)
+
 // Protocol identifiers
 const (
 	ProtoShadowsocks = "shadowsocks"
@@ -72,6 +79,41 @@ type ProxyNode struct {
 	// Internal metadata
 	Detour string            `json:"detour,omitempty"`
 	Extra  map[string]string `json:"extra,omitempty"`
+}
+
+// Identity returns a stable short hash of the node's connection parameters.
+// It deliberately excludes the tag and any decoration, so pipeline renames
+// never move it, and per-key node disable lists survive upstream refreshes.
+// If the upstream genuinely changes server/port/credentials, the identity
+// changes with the node - stale disable entries then age out.
+func (n *ProxyNode) Identity() string {
+	sig := strings.Join([]string{
+		n.Type, n.Server, strconv.Itoa(n.Port),
+		n.UUID, n.Password, n.Method, n.Path,
+		n.PrivateKey, n.PeerPubKey, n.PreSharedKey, n.ObfsPass,
+	}, "|")
+	sum := sha256.Sum256([]byte(sig))
+	return hex.EncodeToString(sum[:])[:12]
+}
+
+// FilterDisabled drops nodes whose Identity() appears in disabled. It returns
+// the original slice untouched when the blacklist is empty, and never mutates
+// the input - the full set stays shared in the delivery cache.
+func FilterDisabled(nodes []*ProxyNode, disabled []string) []*ProxyNode {
+	if len(disabled) == 0 {
+		return nodes
+	}
+	drop := make(map[string]bool, len(disabled))
+	for _, d := range disabled {
+		drop[d] = true
+	}
+	out := make([]*ProxyNode, 0, len(nodes))
+	for _, n := range nodes {
+		if !drop[n.Identity()] {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // Clone creates a shallow-to-medium clone of the node.

@@ -12,12 +12,14 @@ import (
 	"github.com/arisvia/subrefine/internal/api"
 	"github.com/arisvia/subrefine/internal/config"
 	"github.com/arisvia/subrefine/internal/core/model"
+	"github.com/arisvia/subrefine/internal/storage"
 )
 
 type mockSubManager struct {
 	expectedID    string
 	expectedToken string
 	nodes         []*model.ProxyNode
+	disabled      []string // per-key blacklist the mock's Resolve key carries
 	invalidated   []string
 	sbMode        string
 	clMode        string
@@ -28,6 +30,15 @@ func (m *mockSubManager) GetSubscription(id string, token string) ([]*model.Prox
 		return nil, errors.New("forbidden")
 	}
 	return m.nodes, nil
+}
+
+func (m *mockSubManager) Resolve(id, token string) (*storage.Subscription, *storage.SubKey, []*model.ProxyNode, error) {
+	if id != m.expectedID || token != m.expectedToken {
+		return nil, nil, nil, errors.New("forbidden")
+	}
+	sub := &storage.Subscription{ID: id, Token: token, Enabled: true}
+	key := &storage.SubKey{ID: "default", Name: "Default", Token: token, Disabled: m.disabled}
+	return sub, key, m.nodes, nil
 }
 
 func (m *mockSubManager) Invalidate(id string) {

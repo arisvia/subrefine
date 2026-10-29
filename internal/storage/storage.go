@@ -1,6 +1,9 @@
 package storage
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,10 +31,24 @@ type PipelineStep struct {
 	Order       string   `json:"order,omitempty"`       // sort: asc | desc
 }
 
+// SubKey is one delivery credential for a subscription. Different users get
+// different keys (and thus different links), and each key may carry its own
+// blacklist of node identities to withhold. The subscription's primary Token
+// always mirrors Keys[0] so links already in the wild keep working.
+type SubKey struct {
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Token    string   `json:"token"`
+	Disabled []string `json:"disabled,omitempty"` // node Identity() values to withhold
+}
+
 type Subscription struct {
-	ID       string         `json:"id"`
-	Name     string         `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Token is the primary key's token, kept in sync by Normalize. Delivery
+	// accepts any key's token, not just this one.
 	Token    string         `json:"token"`
+	Keys     []SubKey       `json:"keys,omitempty"`
 	Sources  []string       `json:"sources"` // URLs or local nodes
 	Pipeline []PipelineStep `json:"pipeline"`
 	Enabled  bool           `json:"enabled"`
@@ -43,6 +60,84 @@ type Subscription struct {
 	ClashMode   string `json:"clash_mode,omitempty"`
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
+}
+
+// Normalize migrates a legacy single-token subscription into the Keys model and
+// keeps the primary Token in sync with Keys[0]. It is idempotent and runs on
+// every load and save, so hand-edited or pre-existing data files converge
+// without a migration step. Missing ids/tokens are generated in place.
+func (s *Subscription) Normalize() error {
+	if len(s.Keys) == 0 {
+		token := s.Token
+		if token == "" {
+			t, err := generateToken()
+			if err != nil {
+				return err
+			}
+			token = t
+		}
+		s.Keys = []SubKey{{ID: "default", Name: "Default", Token: token}}
+	}
+	for i := range s.Keys {
+		if s.Keys[i].Token == "" {
+			t, err := generateToken()
+			if err != nil {
+				return err
+			}
+			s.Keys[i].Token = t
+		}
+		if s.Keys[i].ID == "" {
+			id, err := generateToken()
+			if err != nil {
+				return err
+			}
+			s.Keys[i].ID = "k" + id[:8]
+		}
+		if s.Keys[i].Name == "" {
+			s.Keys[i].Name = fmt.Sprintf("Key %d", i+1)
+		}
+	}
+	s.Token = s.Keys[0].Token
+	return nil
+}
+
+// FindKey returns the key whose token matches the supplied value, comparing in
+// constant time against every key. Returns nil when no key matches.
+func (s *Subscription) FindKey(token string) *SubKey {
+	if token == "" {
+		return nil
+	}
+	var match *SubKey
+	for i := range s.Keys {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(s.Keys[i].Token)) == 1 {
+			match = &s.Keys[i]
+		}
+	}
+	return match
+}
+
+// DuplicateTokenID reports the id of a key sharing its token with an earlier
+// key, or "" when all tokens are distinct.
+func (s *Subscription) DuplicateTokenID() string {
+	seen := make(map[string]string, len(s.Keys))
+	for _, k := range s.Keys {
+		if first, ok := seen[k.Token]; ok {
+			if first == "" {
+				return k.ID
+			}
+			return first
+		}
+		seen[k.Token] = k.ID
+	}
+	return ""
+}
+
+func generateToken() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate token: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 type Store struct {
@@ -84,6 +179,9 @@ func (s *Store) load() error {
 	}
 
 	for _, sub := range list {
+		if err := sub.Normalize(); err != nil {
+			return err
+		}
 		s.subs[sub.ID] = sub
 	}
 	return nil
@@ -133,6 +231,12 @@ func (s *Store) List() []*Subscription {
 func (s *Store) Save(sub *Subscription) error {
 	if err := ValidateID(sub.ID); err != nil {
 		return err
+	}
+	if err := sub.Normalize(); err != nil {
+		return err
+	}
+	if dup := sub.DuplicateTokenID(); dup != "" {
+		return fmt.Errorf("two delivery keys share the same token (key %q)", dup)
 	}
 
 	s.mu.Lock()
