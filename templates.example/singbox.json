@@ -84,6 +84,14 @@
       "listen_port": 9000
     }
   ],
+  "http_clients": [
+    {
+      "tag": "default",
+      "version": 3,
+      "stream_receive_window": 0,
+      "connection_receive_window": 0
+    }
+  ],
   "outbounds": [
     {
       "type": "direct",
