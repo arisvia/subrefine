@@ -124,15 +124,15 @@ func TestSingboxFullRenderRegexFallbackAndGuards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// No node matches the HK regex: the group degrades to all nodes instead
-	// of shipping an empty (client-rejected) urltest.
+	// No node matches the HK regex: the group degrades to Direct (compatible)
+	// instead of dumping unrelated nodes (like FRA-01) into the group.
 	only := []*model.ProxyNode{{Tag: "FRA-01", Type: model.ProtoShadowsocks, Server: "1.1.1.1", Port: 1, Method: "aes-128-gcm", Password: "p"}}
 	data, err := tmpl.Render(only, allOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"tag": "HK"`) || !strings.Contains(string(data), "FRA-01") {
-		t.Fatalf("fallback group missing: %s", data)
+	if !strings.Contains(string(data), `"tag": "HK"`) {
+		t.Fatalf("HK group must stay in output: %s", data)
 	}
 	var doc struct {
 		Outbounds []struct {
@@ -142,8 +142,10 @@ func TestSingboxFullRenderRegexFallbackAndGuards(t *testing.T) {
 	}
 	json.Unmarshal(data, &doc)
 	for _, ob := range doc.Outbounds {
-		if ob.Tag == "HK" && strings.Join(ob.Outbounds, ",") != "FRA-01,Direct" {
-			t.Fatalf("regex-with-no-match must fall back to all nodes: %v", ob.Outbounds)
+		if ob.Tag == "HK" {
+			if strings.Join(ob.Outbounds, ",") != "Direct" {
+				t.Fatalf("regex-with-no-match must fall back to Direct: %v", ob.Outbounds)
+			}
 		}
 	}
 

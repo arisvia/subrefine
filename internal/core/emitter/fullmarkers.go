@@ -69,15 +69,33 @@ func expandMarkerList(refs []any, nodeNames []string, rx markerRegexes) ([]any, 
 			}
 		}
 		if matched == 0 {
-			// An empty selector/url-test list makes either client reject the
-			// whole config; a region group with no current members degrades
-			// to "all nodes" rather than breaking delivery.
-			for _, name := range nodeNames {
-				out = append(out, name)
+			// When a region filter matches zero nodes, sing-box rejects an
+			// empty outbounds list (FATAL: missing tags). Instead of dumping
+			// all unrelated nodes into the group (defeating grouping), fall
+			// back to "Direct" (compatible mode). Avoid duplicate if Direct
+			// is already an explicit member.
+			alreadyDirect := false
+			for _, o := range out {
+				if o == "Direct" {
+					alreadyDirect = true
+					break
+				}
+			}
+			if !alreadyDirect {
+				out = append(out, "Direct")
 			}
 		}
 	}
-	return out, nil
+	// Deduplicate preserving order (e.g. static "Direct" after a fallback "Direct").
+	seen := make(map[any]bool, len(out))
+	deduped := make([]any, 0, len(out))
+	for _, item := range out {
+		if !seen[item] {
+			seen[item] = true
+			deduped = append(deduped, item)
+		}
+	}
+	return deduped, nil
 }
 
 // hasMarker reports whether the serialized document still contains a marker
