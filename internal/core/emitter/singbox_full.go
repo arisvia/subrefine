@@ -162,13 +162,12 @@ func (t *SingboxTemplate) Render(nodes []*model.ProxyNode, opts FullOptions) ([]
 	// reference; anything still present means the template referenced nodes
 	// where sing-box cannot carry a list. Fail loudly, never ship a
 	// placeholder.
-	rest, err := json.Marshal(doc)
+	out, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("sing-box template render: %w", err)
 	}
-	if hasMarker(rest) {
+	if hasMarker(out) {
 		return nil, fmt.Errorf("sing-box template contains %s markers outside outbounds group lists", markerPrefix)
 	}
-
-	return json.MarshalIndent(doc, "", "  ")
+	return out, nil
 }

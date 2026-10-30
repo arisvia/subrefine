@@ -1,7 +1,6 @@
 package emitter
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/arisvia/subrefine/internal/core/model"
@@ -159,13 +158,12 @@ func (t *ClashFullTemplate) Render(nodes []*model.ProxyNode, opts FullOptions) (
 
 	// Same leak guard as sing-box: a marker outside the two expansion sites
 	// would reach the client as a dangling group member.
-	rest, err := json.Marshal(doc)
+	out, err := yaml.Marshal(doc)
 	if err != nil {
 		return nil, fmt.Errorf("clash template render: %w", err)
 	}
-	if hasMarker(rest) {
+	if hasMarker(out) {
 		return nil, fmt.Errorf("clash template contains %s markers outside proxies/proxy-groups lists", markerPrefix)
 	}
-
-	return yaml.Marshal(doc)
+	return out, nil
 }

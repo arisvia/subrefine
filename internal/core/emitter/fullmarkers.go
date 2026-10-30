@@ -1,6 +1,7 @@
 package emitter
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"regexp"
@@ -16,6 +17,8 @@ import (
 //	                        referencing group stays loadable
 
 const markerPrefix = "@subrefine"
+
+var markerPrefixBytes = []byte(markerPrefix)
 
 // ErrNoDeliverableNodes is returned by full-config renders when the node set
 // contributes nothing injectable: a full config whose groups reference zero
@@ -100,6 +103,6 @@ func expandMarkerList(refs []any, nodeNames []string, rx markerRegexes) ([]any, 
 
 // hasMarker reports whether the serialized document still contains a marker
 // (which would mean it leaked into a place no list expansion covers).
-func hasMarker(jsonBytes []byte) bool {
-	return strings.Contains(string(jsonBytes), markerPrefix)
+func hasMarker(data []byte) bool {
+	return bytes.Contains(data, markerPrefixBytes)
 }
