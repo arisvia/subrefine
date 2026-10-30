@@ -1,13 +1,13 @@
-import { type Component, Show, createEffect, createMemo, createSignal } from 'solid-js'
+import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js'
 import { useI18n } from '@/i18n'
-import { Button, Modal, SegmentedControl, IconClipboard } from '@/components/ui'
+import { Button, Modal, SegmentedControl, Checkbox, IconClipboard } from '@/components/ui'
 import { DELIVERY_OPTIONS, deliveryUrl, type DeliveryTarget } from '@/lib/sublinks'
 import { useTemplatesStore } from '@/stores/templates'
 import { useKeysStore } from '@/stores/keys'
 import { copyToClipboard } from '@/lib/clipboard'
 import { toast } from '@/lib/toast'
 import { maskKey } from '@/lib/format'
-import type { Subscription } from '@/types/domain'
+import type { FamilyOptions, Subscription } from '@/types/domain'
 
 export interface DeliveryModalProps {
   /** null closes the dialog; the opener preselects a format. */
@@ -16,10 +16,18 @@ export interface DeliveryModalProps {
   onClose: () => void
 }
 
+/** Human label for an inbound kind. Unknown kinds fall back to uppercase. */
+const INBOUND_LABEL_KEY: Record<string, 'delivery.inMixed' | 'delivery.inTun' | 'delivery.inTproxy'> = {
+  mixed: 'delivery.inMixed',
+  tun: 'delivery.inTun',
+  tproxy: 'delivery.inTproxy',
+}
+
 /**
- * Sub-Store style output dialog: pick format, delivery key and (for
- * sing-box/clash) fragment-vs-template mode, then copy the exact URL.
- * Nothing is stored on the subscription - the choice lives in the link.
+ * Sub-Store style output dialog: pick format, delivery key, and (for
+ * sing-box/clash with a loaded template) fragment-vs-full plus the full-config
+ * options. Nothing is stored on the subscription - every choice lives in the
+ * copied link, so one subscription serves any combination at once.
  */
 export const DeliveryModal: Component<DeliveryModalProps> = props => {
   const { t } = useI18n()
@@ -28,13 +36,17 @@ export const DeliveryModal: Component<DeliveryModalProps> = props => {
 
   const [target, setTarget] = createSignal<DeliveryTarget>('uri')
   const [keyId, setKeyId] = createSignal('')
-  const [mode, setMode] = createSignal('')
+  const [full, setFull] = createSignal(false)
+  const [inbounds, setInbounds] = createSignal<string[]>([])
+  const [ipv6, setIpv6] = createSignal(true)
 
-  const modeList = createMemo<string[]>(() => {
-    if (target() === 'sing-box') return templates.modes().singbox ?? []
-    if (target() === 'clash') return templates.modes().clash ?? []
-    return []
-  })
+  function familyFor(tg: DeliveryTarget): FamilyOptions {
+    const o = templates.options()
+    if (tg === 'sing-box') return o.singbox
+    if (tg === 'clash') return o.clash
+    return { available: false, inbounds: [] }
+  }
+  const family = createMemo(() => familyFor(target()))
 
   // Re-seed the choices whenever a subscription is opened.
   createEffect(() => {
@@ -42,20 +54,45 @@ export const DeliveryModal: Component<DeliveryModalProps> = props => {
     if (!sub) return
     setTarget(props.initialTarget)
     setKeyId(sub.keys?.[0]?.id ?? '')
-    setMode('')
+    setFull(false)
+    setInbounds([])
+    setIpv6(true)
     void templates.load()
   })
 
-  // A mode chosen for one family may not exist in the other; snap back to
-  // the fragment instead of producing a link the server would downgrade.
-  createEffect(() => {
-    const list = modeList()
-    if (mode() && !list.includes(mode())) setMode('')
-  })
+  // Switching format keeps the full selection only if the new family has a
+  // template; otherwise snap back to the fragment so we never emit a link the
+  // server would downgrade.
+  function chooseTarget(next: DeliveryTarget) {
+    setTarget(next)
+    if (!full()) return
+    const fam = familyFor(next)
+    if (!fam.available) {
+      setFull(false)
+      return
+    }
+    setInbounds(fam.inbounds.slice())
+  }
+
+  function toggleFull(v: string) {
+    const on = v === '1'
+    setFull(on)
+    if (on) {
+      setInbounds(family().inbounds.slice())
+      setIpv6(true)
+    }
+  }
+
+  function toggleInbound(kind: string, on: boolean) {
+    const cur = inbounds()
+    setInbounds(on ? [...cur, kind] : cur.filter(x => x !== kind))
+  }
 
   const token = () => keysPool.byId(keyId())?.token ?? props.sub?.token ?? ''
   const url = createMemo(() =>
-    props.sub ? deliveryUrl(props.sub.id, token(), target(), mode()) : '')
+    props.sub
+      ? deliveryUrl(props.sub.id, token(), target(), { full: full(), inbounds: inbounds(), ipv6: ipv6() })
+      : '')
 
   const copy = async () => {
     if (await copyToClipboard(url())) {
@@ -93,7 +130,7 @@ export const DeliveryModal: Component<DeliveryModalProps> = props => {
             <SegmentedControl
               class="w-full"
               value={target()}
-              onChange={setTarget}
+              onChange={chooseTarget}
               options={DELIVERY_OPTIONS.map(o => ({ value: o.target, label: o.label }))}
             />
           </div>
@@ -113,21 +150,45 @@ export const DeliveryModal: Component<DeliveryModalProps> = props => {
             </div>
           </Show>
 
-          <Show when={modeList().length}>
-            <div>
-              <div class="pb-1.5 text-xs text-muted">{t('delivery.mode')}</div>
-              <SegmentedControl
-                class="w-full"
-                value={mode()}
-                onChange={setMode}
-                options={[
-                  { value: '', label: t('delivery.modeFragment') },
-                  ...modeList().map(m => ({ value: m, label: m.toUpperCase() })),
-                ]}
-              />
-              <div class="pt-1.5 text-[11px] text-faint">
-                {mode() === '' ? t('delivery.modeFragmentHint') : t('delivery.modeFullHint')}
+          <Show when={family().available}>
+            <div class="space-y-3 border-t border-border/60 pt-3">
+              <div>
+                <div class="pb-1.5 text-xs text-muted">{t('delivery.shape')}</div>
+                <SegmentedControl
+                  class="w-full"
+                  value={full() ? '1' : '0'}
+                  onChange={toggleFull}
+                  options={[
+                    { value: '0', label: t('delivery.shapeFragment') },
+                    { value: '1', label: t('delivery.shapeFull') },
+                  ]}
+                />
               </div>
+
+              <Show when={full()}>
+                <Show when={family().inbounds.length}>
+                  <div>
+                    <div class="pb-1.5 text-xs text-muted">{t('delivery.inbounds')}</div>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1.5">
+                      <For each={family().inbounds}>
+                        {(kind) => (
+                          <Checkbox
+                            checked={inbounds().includes(kind)}
+                            label={INBOUND_LABEL_KEY[kind] ? t(INBOUND_LABEL_KEY[kind]) : kind.toUpperCase()}
+                            onChange={on => toggleInbound(kind, on)}
+                          />
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </Show>
+                <Checkbox
+                  checked={ipv6()}
+                  label={t('delivery.ipv6')}
+                  onChange={setIpv6}
+                />
+                <div class="text-[11px] text-faint">{t('delivery.fullHint')}</div>
+              </Show>
             </div>
           </Show>
 

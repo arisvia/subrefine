@@ -95,9 +95,15 @@ export interface Subscription {
   updated_at: number
 }
 
-export interface TemplateModes {
-  singbox: string[]
-  clash: string[]
+/** Per-family full-config capability reported by the server. */
+export interface FamilyOptions {
+  available: boolean
+  inbounds: string[]
+}
+
+export interface TemplateOptions {
+  singbox: FamilyOptions
+  clash: FamilyOptions
 }
 
 /** Upstream account metadata (subscription-userinfo), bytes + unix seconds. */

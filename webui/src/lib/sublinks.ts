@@ -17,14 +17,29 @@ export const DELIVERY_OPTIONS: DeliveryOption[] = [
   { target: 'uri', label: 'Base64', hintKey: 'subs.hintUri' },
 ]
 
+/** Full-config delivery switches baked into the link. Empty/undefined opts
+ *  produce the plain node fragment. */
+export interface DeliveryOpts {
+  /** request the complete templated config instead of the fragment */
+  full?: boolean
+  /** inbound kinds to keep (mixed / tun / tproxy); only meaningful with full */
+  inbounds?: string[]
+  /** force IPv6 posture; undefined leaves the template default */
+  ipv6?: boolean
+}
+
 /**
  * Absolute delivery URL. The sub token rides in the query because that is what
- * every proxy client supports when a subscription is pasted as a URL. A non-
- * empty mode asks the server for that full-config template instead of the
- * plain fragment; nothing about the choice is stored on the subscription.
+ * every proxy client supports when a subscription is pasted as a URL. The
+ * full-config switches live here, not on the subscription: one subscription
+ * serves the fragment and any option combination simultaneously.
  */
-export function deliveryUrl(id: string, token: string, target: DeliveryTarget, mode = ''): string {
+export function deliveryUrl(id: string, token: string, target: DeliveryTarget, opts: DeliveryOpts = {}): string {
   const q = new URLSearchParams({ token, target })
-  if (mode) q.set('mode', mode)
+  if (opts.full) {
+    q.set('full', '1')
+    if (opts.inbounds?.length) q.set('inbounds', opts.inbounds.join(','))
+    if (opts.ipv6 !== undefined) q.set('ipv6', opts.ipv6 ? '1' : '0')
+  }
   return `${location.origin}/s/${encodeURIComponent(id)}?${q.toString()}`
 }

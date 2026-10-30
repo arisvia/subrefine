@@ -1,26 +1,31 @@
 import { createRoot, createSignal } from 'solid-js'
 import { api } from '@/lib/api'
-import type { TemplateModes } from '@/types/domain'
+import type { FamilyOptions, TemplateOptions } from '@/types/domain'
 
-const EMPTY: TemplateModes = { singbox: [], clash: [] }
+const EMPTY_FAMILY: FamilyOptions = { available: false, inbounds: [] }
+const EMPTY: TemplateOptions = { singbox: EMPTY_FAMILY, clash: EMPTY_FAMILY }
 
 export interface TemplatesStore {
-  modes: () => TemplateModes
+  options: () => TemplateOptions
   load: () => Promise<void>
 }
 
 function createTemplatesStore(): TemplatesStore {
-  const [modes, setModes] = createSignal<TemplateModes>(EMPTY)
+  const [options, setOptions] = createSignal<TemplateOptions>(EMPTY)
 
   async function load() {
     try {
-      setModes(await api<TemplateModes>('/api/admin/templates'))
+      const raw = await api<Partial<TemplateOptions>>('/api/admin/templates')
+      setOptions({
+        singbox: { ...EMPTY_FAMILY, ...raw.singbox },
+        clash: { ...EMPTY_FAMILY, ...raw.clash },
+      })
     } catch {
-      setModes(EMPTY)
+      setOptions(EMPTY)
     }
   }
 
-  return { modes, load }
+  return { options, load }
 }
 
 let store: TemplatesStore | undefined
