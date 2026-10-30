@@ -31,7 +31,7 @@ func ParseURI(raw string) (*model.ProxyNode, error) {
 	}
 
 	tag := u.Fragment
-	if unescaped, err := url.QueryUnescape(tag); err == nil && unescaped != "" {
+	if unescaped, err := url.PathUnescape(tag); err == nil && unescaped != "" {
 		tag = unescaped
 	}
 

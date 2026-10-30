@@ -2,6 +2,7 @@ package parser_test
 
 import (
 	"encoding/base64"
+	"strings"
 	"testing"
 
 	"github.com/arisvia/subrefine/internal/core/emitter"
@@ -157,5 +158,39 @@ func TestParseAndEmitURI(t *testing.T) {
 			}
 			tt.check(t, reparsed)
 		})
+	}
+}
+
+func TestURITagSpacesNotPlus(t *testing.T) {
+	origTag := "🇭🇰 HongKong1 ×2.3"
+	node := &model.ProxyNode{
+		Tag:      origTag,
+		Type:     model.ProtoVLESS,
+		Server:   "1.2.3.4",
+		Port:     443,
+		UUID:     "ca7b0f4a-87d7-4776-a36e-bbf40e0be2f6",
+		Security: model.SecurityTLS,
+	}
+
+	uriStr, err := emitter.ToURI(node)
+	if err != nil {
+		t.Fatalf("ToURI: %v", err)
+	}
+
+	// Verify that the emitted URI contains %20 and does NOT contain '+' for spaces
+	if strings.Contains(uriStr, "+") {
+		t.Fatalf("emitted URI must not contain '+' in fragment for spaces: %s", uriStr)
+	}
+	if !strings.Contains(uriStr, "%20") {
+		t.Fatalf("emitted URI must use %%20 for spaces: %s", uriStr)
+	}
+
+	// Re-parse and verify tag identity
+	parsed, err := parser.ParseURI(uriStr)
+	if err != nil {
+		t.Fatalf("ParseURI: %v", err)
+	}
+	if parsed.Tag != origTag {
+		t.Fatalf("tag mismatch after round-trip: got %q, want %q", parsed.Tag, origTag)
 	}
 }

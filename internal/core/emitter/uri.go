@@ -50,7 +50,7 @@ func emitShadowsocks(n *model.ProxyNode) (string, error) {
 
 	res := fmt.Sprintf("ss://%s@%s", encodedUser, hostPort)
 	if n.Tag != "" {
-		res += "#" + url.QueryEscape(n.Tag)
+		res += "#" + escapeTag(n.Tag)
 	}
 	return res, nil
 }
@@ -102,7 +102,7 @@ func emitVLESS(n *model.ProxyNode) (string, error) {
 		uri += "?" + query
 	}
 	if n.Tag != "" {
-		uri += "#" + url.QueryEscape(n.Tag)
+		uri += "#" + escapeTag(n.Tag)
 	}
 	return uri, nil
 }
@@ -142,7 +142,7 @@ func emitTrojan(n *model.ProxyNode) (string, error) {
 		uri += "?" + query
 	}
 	if n.Tag != "" {
-		uri += "#" + url.QueryEscape(n.Tag)
+		uri += "#" + escapeTag(n.Tag)
 	}
 	return uri, nil
 }
@@ -172,7 +172,7 @@ func emitAnyTLS(n *model.ProxyNode) (string, error) {
 		uri += "?" + query
 	}
 	if n.Tag != "" {
-		uri += "#" + url.QueryEscape(n.Tag)
+		uri += "#" + escapeTag(n.Tag)
 	}
 	return uri, nil
 }
@@ -200,7 +200,7 @@ func emitHysteria2(n *model.ProxyNode) (string, error) {
 		uri += "?" + query
 	}
 	if n.Tag != "" {
-		uri += "#" + url.QueryEscape(n.Tag)
+		uri += "#" + escapeTag(n.Tag)
 	}
 	return uri, nil
 }
@@ -265,7 +265,15 @@ func emitWireGuard(n *model.ProxyNode) (string, error) {
 		uri += "?" + q
 	}
 	if n.Tag != "" {
-		uri += "#" + url.QueryEscape(n.Tag)
+		uri += "#" + escapeTag(n.Tag)
 	}
 	return uri, nil
+}
+
+// escapeTag encodes the node name for URI fragment (#tag).
+// RFC 3986 path percent-encoding (spaces as %20) is required.
+// url.QueryEscape must NOT be used because it encodes spaces as '+',
+// which proxy clients do not unescape in URL fragments and display as literal '+'.
+func escapeTag(tag string) string {
+	return url.PathEscape(tag)
 }
