@@ -121,7 +121,7 @@ func TestPreviewExposesIdentities(t *testing.T) {
 		t.Fatalf("preview: %d %s", rec.Code, rec.Body.String())
 	}
 	var out struct {
-		Count int      `json:"count"`
+		Count int `json:"count"`
 		Nodes []struct {
 			Tag string `json:"tag"`
 		} `json:"nodes"`
