@@ -6,24 +6,15 @@
   "dns": {
     "servers": [
       {
-        "type": "udp",
-        "tag": "bootstrap",
-        "server": "223.5.5.5"
-      },
-      {
         "type": "https",
         "tag": "global",
         "server": "8.8.8.8",
-        "path": "/dns-query",
-        "domain_resolver": "bootstrap",
         "detour": "Available"
       },
       {
         "type": "https",
         "tag": "local",
-        "server": "223.5.5.5",
-        "path": "/dns-query",
-        "domain_resolver": "bootstrap"
+        "server": "223.5.5.5"
       },
       {
         "type": "fakeip",
@@ -241,7 +232,7 @@
     }
   ],
   "route": {
-    "default_domain_resolver": "bootstrap",
+    "default_domain_resolver": "local",
     "rules": [
       {
         "action": "sniff"

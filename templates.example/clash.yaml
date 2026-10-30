@@ -8,7 +8,7 @@
 ipv6: true
 mixed-port: 7890
 tproxy-port: 9000
-allow-lan: false
+allow-lan: true
 unified-delay: true
 tcp-concurrent: true
 find-process-mode: strict
@@ -84,17 +84,14 @@ dns:
     - https://dns.google/dns-query#Available
 tun:
   enable: true
-  stack: system
+  stack: mips
   auto-route: true
-  auto-redirect: false
-  strict-route: false
+  strict-route: true
   auto-detect-interface: true
   dns-hijack:
   - any:53
   - tcp://any:53
   mtu: 1480
-  gso: true
-  gso-max-size: 65536
   udp-timeout: 300
   route-exclude-address:
   - 224.0.0.0/3
