@@ -73,15 +73,26 @@ func TestClashKeepsWireGuard(t *testing.T) {
 	}
 }
 
-// mihomo refuses to load a config whose url-test group has no proxies, so a
-// fully filtered subscription must fall back to a bare DIRECT ruleset.
-func TestClashZeroNodesStaysLoadable(t *testing.T) {
-	data, err := emitter.ToClashYAML([]*model.ProxyNode{})
-	if err != nil {
-		t.Fatalf("ToClashYAML: %v", err)
-	}
-	s := string(data)
-	if !strings.Contains(s, "MATCH,DIRECT") || strings.Contains(s, "url-test") {
-		t.Fatalf("zero-node clash output must be a bare DIRECT config:\n%s", s)
+// The clash fragment is a bare node list: it must never carry proxy-groups,
+// rules, or listeners (those belong to the full-template path). A fully
+// filtered subscription still yields a valid empty proxies list.
+func TestClashFragmentIsNodesOnly(t *testing.T) {
+	for _, nodes := range [][]*model.ProxyNode{
+		{},
+		{{Tag: "US", Type: model.ProtoVLESS, UUID: "u", Server: "1.1.1.1", Port: 443}},
+	} {
+		data, err := emitter.ToClashYAML(nodes)
+		if err != nil {
+			t.Fatalf("ToClashYAML: %v", err)
+		}
+		s := string(data)
+		for _, banned := range []string{"proxy-groups", "rules:", "url-test", "MATCH,"} {
+			if strings.Contains(s, banned) {
+				t.Fatalf("clash fragment must not contain %q:\n%s", banned, s)
+			}
+		}
+		if !strings.Contains(s, "proxies:") {
+			t.Fatalf("clash fragment must be a proxies list:\n%s", s)
+		}
 	}
 }

@@ -9,6 +9,10 @@ import (
 	"github.com/arisvia/subrefine/internal/core/model"
 )
 
+// allOpts keeps every managed inbound so the injection tests are unaffected
+// by the option switch.
+func allOpts() FullOptions { return FullOptions{Inbounds: []string{"mixed", "tun", "tproxy"}} }
+
 func fullNodes() []*model.ProxyNode {
 	return []*model.ProxyNode{
 		{Tag: "HK-01", Type: model.ProtoShadowsocks, Server: "1.2.3.4", Port: 8388, Method: "aes-128-gcm", Password: "p"},
@@ -53,7 +57,7 @@ func TestSingboxFullRenderInjectsAndExpands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := tmpl.Render(fullNodes())
+	data, err := tmpl.Render(fullNodes(), allOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +127,7 @@ func TestSingboxFullRenderRegexFallbackAndGuards(t *testing.T) {
 	// No node matches the HK regex: the group degrades to all nodes instead
 	// of shipping an empty (client-rejected) urltest.
 	only := []*model.ProxyNode{{Tag: "FRA-01", Type: model.ProtoShadowsocks, Server: "1.1.1.1", Port: 1, Method: "aes-128-gcm", Password: "p"}}
-	data, err := tmpl.Render(only)
+	data, err := tmpl.Render(only, allOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,12 +148,12 @@ func TestSingboxFullRenderRegexFallbackAndGuards(t *testing.T) {
 	}
 
 	// Zero deliverable nodes is an explicit error, never an empty config.
-	if _, err := tmpl.Render(nil); !errors.Is(err, ErrNoDeliverableNodes) {
+	if _, err := tmpl.Render(nil, allOpts()); !errors.Is(err, ErrNoDeliverableNodes) {
 		t.Fatalf("empty node set: %v, want ErrNoDeliverableNodes", err)
 	}
 	// WG-only node set is likewise undeliverable to sing-box.
 	wgOnly := []*model.ProxyNode{{Tag: "WG", Type: model.ProtoWireGuard, Server: "1.2.3.4", Port: 51820, PrivateKey: "k", PeerPubKey: "p"}}
-	if _, err := tmpl.Render(wgOnly); !errors.Is(err, ErrNoDeliverableNodes) {
+	if _, err := tmpl.Render(wgOnly, allOpts()); !errors.Is(err, ErrNoDeliverableNodes) {
 		t.Fatalf("wg-only node set: %v, want ErrNoDeliverableNodes", err)
 	}
 }
@@ -160,7 +164,7 @@ func TestSingboxFullRenderRejectsStrayMarker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tmpl.Render(fullNodes()); err == nil || !strings.Contains(err.Error(), "outside outbounds group lists") {
+	if _, err := tmpl.Render(fullNodes(), allOpts()); err == nil || !strings.Contains(err.Error(), "outside outbounds group lists") {
 		t.Fatalf("stray marker must error, got %v", err)
 	}
 }
@@ -193,7 +197,7 @@ func TestClashFullTemplateRender(t *testing.T) {
 	}
 	nodes := fullNodes()
 	nodes = append(nodes, &model.ProxyNode{Tag: "WG-DE", Type: model.ProtoWireGuard, Server: "1.2.3.4", Port: 51820, PrivateKey: "a", PeerPubKey: "b", LocalAddr: []string{"10.0.0.2/32"}})
-	data, err := tmpl.Render(nodes)
+	data, err := tmpl.Render(nodes, allOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,5 +225,133 @@ func TestClashFullTemplateLoadValidation(t *testing.T) {
 	}
 	if _, err := LoadClashFullTemplate([]byte("proxy-groups:\n  - {name: G, type: select, proxies: [\"@subrefine:(\"]}\nproxies:\n  - {name: \"@subrefine\"}\n")); err == nil {
 		t.Fatal("invalid marker regex must fail at load")
+	}
+}
+
+const sbMultiTemplate = `{
+  "dns": {"servers": [], "strategy": "ipv4_only"},
+  "inbounds": [
+    {"type": "mixed", "tag": "mixed-in", "listen": "127.0.0.1", "listen_port": 7890},
+    {"type": "tun", "tag": "tun-in", "address": ["172.18.0.1/30"], "auto_route": true},
+    {"type": "tproxy", "tag": "tp-in", "listen": "127.0.0.1", "listen_port": 9000},
+    {"type": "redirect", "tag": "keep-me", "listen": "127.0.0.1", "listen_port": 9300}
+  ],
+  "outbounds": [
+    {"type": "direct", "tag": "@subrefine"},
+    {"type": "selector", "tag": "G", "outbounds": ["@subrefine"]}
+  ]
+}`
+
+func TestSingboxFullRenderFiltersInbounds(t *testing.T) {
+	tmpl, err := LoadSingboxTemplate([]byte(sbMultiTemplate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(tmpl.InboundOptions(), ","); got != "mixed,tproxy,tun" {
+		t.Fatalf("InboundOptions = %q, want mixed,tproxy,tun (redirect is unmanaged)", got)
+	}
+
+	data, err := tmpl.Render(fullNodes(), FullOptions{Inbounds: []string{"tun"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Inbounds []struct {
+			Type string `json:"type"`
+			Tag  string `json:"tag"`
+		} `json:"inbounds"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	kept := map[string]bool{}
+	for _, in := range doc.Inbounds {
+		kept[in.Type] = true
+	}
+	if !kept["tun"] {
+		t.Fatal("selected tun dropped")
+	}
+	if kept["mixed"] || kept["tproxy"] {
+		t.Fatalf("unselected managed inbounds survived: %v", kept)
+	}
+	if !kept["redirect"] {
+		t.Fatal("unmanaged (custom) inbound must always be kept")
+	}
+}
+
+func TestSingboxFullRenderIPv6(t *testing.T) {
+	tmpl, _ := LoadSingboxTemplate([]byte(sbMultiTemplate))
+	on := true
+	off := false
+	data, _ := tmpl.Render(fullNodes(), FullOptions{Inbounds: []string{"tun"}, IPv6: &on})
+	if !strings.Contains(string(data), `"strategy": "prefer_ipv4"`) {
+		t.Fatalf("ipv6 on must set prefer_ipv4: %s", data)
+	}
+	data, _ = tmpl.Render(fullNodes(), FullOptions{Inbounds: []string{"tun"}, IPv6: &off})
+	if !strings.Contains(string(data), `"strategy": "ipv4_only"`) {
+		t.Fatalf("ipv6 off must set ipv4_only: %s", data)
+	}
+	// nil leaves the template's own strategy untouched.
+	data, _ = tmpl.Render(fullNodes(), FullOptions{Inbounds: []string{"tun"}})
+	if !strings.Contains(string(data), `"strategy": "ipv4_only"`) {
+		t.Fatalf("nil ipv6 must not change strategy: %s", data)
+	}
+}
+
+const clashMultiTemplate = `log-level: info
+ipv6: true
+mixed-port: 7890
+tproxy-port: 9000
+redir-port: 9300
+tun:
+  enable: true
+  stack: system
+dns:
+  enable: true
+  ipv6: true
+proxies:
+  - name: "@subrefine"
+proxy-groups:
+  - name: AUTO
+    type: url-test
+    proxies: ["@subrefine"]
+rules:
+  - MATCH,AUTO
+`
+
+func TestClashFullRenderFiltersInbounds(t *testing.T) {
+	tmpl, err := LoadClashFullTemplate([]byte(clashMultiTemplate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(tmpl.InboundOptions(), ","); got != "mixed,tproxy,tun" {
+		t.Fatalf("InboundOptions = %q", got)
+	}
+	data, err := tmpl.Render(fullNodes(), FullOptions{Inbounds: []string{"tun"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(data)
+	if !strings.Contains(out, "tun:") {
+		t.Fatal("selected tun removed")
+	}
+	for _, banned := range []string{"mixed-port:", "tproxy-port:", "redir-port:"} {
+		if strings.Contains(out, banned) {
+			t.Fatalf("unselected listener key %q survived:\n%s", banned, out)
+		}
+	}
+}
+
+func TestClashFullRenderIPv6(t *testing.T) {
+	tmpl, _ := LoadClashFullTemplate([]byte(clashMultiTemplate))
+	off := false
+	data, _ := tmpl.Render(fullNodes(), FullOptions{Inbounds: []string{"tun"}, IPv6: &off})
+	out := string(data)
+	if !strings.Contains(out, "ipv6: false") {
+		t.Fatalf("ipv6 off must set top-level ipv6:false:\n%s", out)
+	}
+	// dns.ipv6 must follow too.
+	if strings.Count(out, "ipv6: false") < 2 {
+		t.Fatalf("dns.ipv6 must also be false:\n%s", out)
 	}
 }

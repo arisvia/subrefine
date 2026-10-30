@@ -72,8 +72,28 @@ func LoadClashFullTemplate(data []byte) (*ClashFullTemplate, error) {
 	return &ClashFullTemplate{raw: data, regexes: regexes}, nil
 }
 
-// Render splices the node proxies into a fresh copy of the template.
-func (t *ClashFullTemplate) Render(nodes []*model.ProxyNode) ([]byte, error) {
+// InboundOptions reports which managed listener kinds (mixed/tun/tproxy) this
+// clash template declares, by presence of their top-level keys.
+func (t *ClashFullTemplate) InboundOptions() []string {
+	var doc map[string]any
+	if err := yaml.Unmarshal(t.raw, &doc); err != nil {
+		return nil
+	}
+	var found []string
+	for opt, keys := range clashKeyForOption {
+		for _, k := range keys {
+			if _, ok := doc[k]; ok {
+				found = append(found, opt)
+				break
+			}
+		}
+	}
+	return sortOptions(found)
+}
+
+// Render splices the node proxies into a fresh copy of the template, keeps
+// only the option-enabled listener keys, and applies the IPv6 posture.
+func (t *ClashFullTemplate) Render(nodes []*model.ProxyNode, opts FullOptions) ([]byte, error) {
 	var doc map[string]any
 	if err := yaml.Unmarshal(t.raw, &doc); err != nil {
 		return nil, fmt.Errorf("clash template re-parse: %w", err)
@@ -124,6 +144,18 @@ func (t *ClashFullTemplate) Render(nodes []*model.ProxyNode) ([]byte, error) {
 		gm["proxies"] = expanded
 	}
 	doc["proxy-groups"] = groups
+
+	// Drop listener keys for options that were not selected (mixed-port,
+	// tun, tproxy-port/redir-port, ...).
+	for opt, keys := range clashKeyForOption {
+		if selected(opts.Inbounds, opt) {
+			continue
+		}
+		for _, k := range keys {
+			delete(doc, k)
+		}
+	}
+	applyClashIPv6(doc, opts.IPv6)
 
 	// Same leak guard as sing-box: a marker outside the two expansion sites
 	// would reach the client as a dangling group member.

@@ -6,17 +6,24 @@
   "dns": {
     "servers": [
       {
+        "type": "udp",
+        "tag": "bootstrap",
+        "server": "223.5.5.5"
+      },
+      {
         "type": "https",
         "tag": "global",
         "server": "8.8.8.8",
         "path": "/dns-query",
+        "domain_resolver": "bootstrap",
         "detour": "Available"
       },
       {
         "type": "https",
         "tag": "local",
         "server": "223.5.5.5",
-        "path": "/dns-query"
+        "path": "/dns-query",
+        "domain_resolver": "bootstrap"
       },
       {
         "type": "fakeip",
@@ -64,6 +71,12 @@
   },
   "inbounds": [
     {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 7890
+    },
+    {
       "type": "tun",
       "tag": "tun-in",
       "address": [
@@ -72,6 +85,12 @@
       ],
       "auto_route": true,
       "strict_route": true
+    },
+    {
+      "type": "tproxy",
+      "tag": "tproxy-in",
+      "listen": "127.0.0.1",
+      "listen_port": 9000
     }
   ],
   "outbounds": [
@@ -222,6 +241,7 @@
     }
   ],
   "route": {
+    "default_domain_resolver": "bootstrap",
     "rules": [
       {
         "action": "sniff"

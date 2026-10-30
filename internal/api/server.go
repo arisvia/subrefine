@@ -47,9 +47,9 @@ type SubManager interface {
 
 // TemplateRegistry supplies the startup-loaded full-config templates.
 type TemplateRegistry interface {
-	SingboxTemplate(mode string) *emitter.SingboxTemplate
-	ClashTemplate(mode string) *emitter.ClashFullTemplate
-	Modes() (singbox, clash []string)
+	SingboxTemplate() *emitter.SingboxTemplate
+	ClashTemplate() *emitter.ClashFullTemplate
+	Options() (singbox, clash emitter.FamilyOptions)
 }
 
 // Target formats
@@ -323,33 +323,35 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	target := DetectTarget(r)
 
+	wantFull, inbounds, ipv6 := resolveFull(r)
+
 	switch target {
 	case TargetSingbox:
 		if skipped := emitter.SingboxSkipped(nodes); len(skipped) > 0 {
 			w.Header().Set("X-Subrefine-Skipped", "wireguard="+strconv.Itoa(len(skipped)))
 			log.Printf("[subrefine] %s: sing-box target dropped %d wireguard node(s) (no wireguard outbound since sing-box 1.13); clash and uri targets still carry them", subID, len(skipped))
 		}
-		if mode := resolveFullMode(r); mode != "" {
+		if wantFull {
 			var tmpl *emitter.SingboxTemplate
 			if s.templates != nil {
-				tmpl = s.templates.SingboxTemplate(mode)
+				tmpl = s.templates.SingboxTemplate()
 			}
 			if tmpl == nil {
-				w.Header().Set("X-Subrefine-Full", "unknown-mode")
-				log.Printf("[subrefine] %s: sing-box full mode %q has no loaded template, serving fragment", subID, mode)
+				w.Header().Set("X-Subrefine-Full", "no-template")
+				log.Printf("[subrefine] %s: sing-box full requested but no template loaded, serving fragment", subID)
 			} else {
-				data, err := tmpl.Render(nodes)
+				data, err := tmpl.Render(nodes, fullOptionsFor(tmpl.InboundOptions(), inbounds, ipv6))
 				switch {
 				case err == nil:
-					w.Header().Set("X-Subrefine-Full", "singbox."+mode)
+					w.Header().Set("X-Subrefine-Full", "singbox")
 					w.Header().Set("Content-Type", "application/json; charset=utf-8")
 					w.Write(data)
 					return
 				case errors.Is(err, emitter.ErrNoDeliverableNodes):
 					w.Header().Set("X-Subrefine-Full", "empty-nodes")
-					log.Printf("[subrefine] %s: sing-box full mode %q has no deliverable nodes, serving fragment", subID, mode)
+					log.Printf("[subrefine] %s: sing-box full has no deliverable nodes, serving fragment", subID)
 				default:
-					log.Printf("[subrefine] %s: sing-box full mode %q render failed: %v", subID, mode, err)
+					log.Printf("[subrefine] %s: sing-box full render failed: %v", subID, err)
 					http.Error(w, `{"error":"render sing-box full config failed"}`, http.StatusInternalServerError)
 					return
 				}
@@ -364,27 +366,27 @@ func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		w.Write(data)
 
 	case TargetClash:
-		if mode := resolveFullMode(r); mode != "" {
+		if wantFull {
 			var tmpl *emitter.ClashFullTemplate
 			if s.templates != nil {
-				tmpl = s.templates.ClashTemplate(mode)
+				tmpl = s.templates.ClashTemplate()
 			}
 			if tmpl == nil {
-				w.Header().Set("X-Subrefine-Full", "unknown-mode")
-				log.Printf("[subrefine] %s: clash full mode %q has no loaded template, serving fragment", subID, mode)
+				w.Header().Set("X-Subrefine-Full", "no-template")
+				log.Printf("[subrefine] %s: clash full requested but no template loaded, serving fragment", subID)
 			} else {
-				data, err := tmpl.Render(nodes)
+				data, err := tmpl.Render(nodes, fullOptionsFor(tmpl.InboundOptions(), inbounds, ipv6))
 				switch {
 				case err == nil:
-					w.Header().Set("X-Subrefine-Full", "clash."+mode)
+					w.Header().Set("X-Subrefine-Full", "clash")
 					w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 					w.Write(data)
 					return
 				case errors.Is(err, emitter.ErrNoDeliverableNodes):
 					w.Header().Set("X-Subrefine-Full", "empty-nodes")
-					log.Printf("[subrefine] %s: clash full mode %q has no deliverable nodes, serving fragment", subID, mode)
+					log.Printf("[subrefine] %s: clash full has no deliverable nodes, serving fragment", subID)
 				default:
-					log.Printf("[subrefine] %s: clash full mode %q render failed: %v", subID, mode, err)
+					log.Printf("[subrefine] %s: clash full render failed: %v", subID, err)
 					http.Error(w, `{"error":"render clash full config failed"}`, http.StatusInternalServerError)
 					return
 				}

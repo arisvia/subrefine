@@ -68,11 +68,33 @@ func LoadSingboxTemplate(data []byte) (*SingboxTemplate, error) {
 	return &SingboxTemplate{raw: data, regexes: regexes}, nil
 }
 
+// InboundOptions reports which managed inbound kinds (mixed/tun/tproxy) this
+// template actually declares, so the console only offers switches that mean
+// something for this template.
+func (t *SingboxTemplate) InboundOptions() []string {
+	var doc map[string]any
+	if err := json.Unmarshal(t.raw, &doc); err != nil {
+		return nil
+	}
+	var found []string
+	if ins, ok := doc["inbounds"].([]any); ok {
+		for _, in := range ins {
+			if im, ok := in.(map[string]any); ok {
+				if tp, _ := im["type"].(string); managedInbounds[tp] {
+					found = append(found, tp)
+				}
+			}
+		}
+	}
+	return sortOptions(found)
+}
+
 // Render splices the deliverable node outbounds into a fresh copy of the
-// template. Nodes the sing-box target cannot express (WireGuard, see
+// template, keeps only the inbounds the selected options enable, and applies
+// the IPv6 posture. Nodes the sing-box target cannot express (WireGuard, see
 // SingboxSkipped) fail ToSingboxOutbound and are skipped, matching the
 // fragment emitter.
-func (t *SingboxTemplate) Render(nodes []*model.ProxyNode) ([]byte, error) {
+func (t *SingboxTemplate) Render(nodes []*model.ProxyNode, opts FullOptions) ([]byte, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(t.raw, &doc); err != nil {
 		return nil, fmt.Errorf("sing-box template re-parse: %w", err)
@@ -116,6 +138,25 @@ func (t *SingboxTemplate) Render(nodes []*model.ProxyNode) ([]byte, error) {
 		rendered = append(rendered, m)
 	}
 	doc["outbounds"] = rendered
+
+	// Keep only the inbounds the selected options enable; unmanaged (custom)
+	// inbounds always survive.
+	if ins, ok := doc["inbounds"].([]any); ok {
+		kept := make([]any, 0, len(ins))
+		for _, in := range ins {
+			im, ok := in.(map[string]any)
+			if !ok {
+				kept = append(kept, in)
+				continue
+			}
+			tp, _ := im["type"].(string)
+			if keepInbound(tp, opts.Inbounds) {
+				kept = append(kept, in)
+			}
+		}
+		doc["inbounds"] = kept
+	}
+	applySingboxIPv6(doc, opts.IPv6)
 
 	// A marker may only legitimately appear as an injection point or a group
 	// reference; anything still present means the template referenced nodes

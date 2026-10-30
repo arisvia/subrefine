@@ -1,13 +1,14 @@
-# mihomo full-config template example. The @subrefine entry in
-# `proxies` is subrefine's injection marker: delivered nodes are
-# spliced in place. Groups use include-all/filter, so they pick up
-# injected proxies automatically. Fill WARP or leave the blanks
-# (mihomo tolerates an unused placeholder until selected).
+# mihomo full-config template. The @subrefine entry in `proxies` is the
+# injection marker: delivered nodes are spliced in place, and the
+# include-all/filter groups pick them up automatically. The listener keys
+# (mixed-port / tun / tproxy-port) are kept or dropped per the delivery
+# options, so this one file serves every combination. No device-specific
+# secrets belong here — add your own WARP/egress as ordinary proxies if you
+# have them, but a shared template must not carry anyone's private keys.
 ipv6: true
 mixed-port: 7890
-tproxy-port: 12345
-routing-mark: 255
-allow-lan: true
+tproxy-port: 9000
+allow-lan: false
 unified-delay: true
 tcp-concurrent: true
 find-process-mode: strict
@@ -83,10 +84,10 @@ dns:
     - https://dns.google/dns-query#Available
 tun:
   enable: true
-  stack: mips
+  stack: system
   auto-route: true
-  auto-redirect: true
-  strict-route: true
+  auto-redirect: false
+  strict-route: false
   auto-detect-interface: true
   dns-hijack:
   - any:53
@@ -133,24 +134,6 @@ sniffer:
   - localhost
 proxies:
 - name: '@subrefine'
-- name: WARP
-  type: wireguard
-  server: ''
-  port: 2408
-  ip: ''
-  ipv6: ''
-  private-key: ''
-  public-key: ''
-  reserved:
-  - 0
-  - 0
-  - 0
-  udp: true
-  mtu: 1280
-  dialer-proxy: Available
-  remote-dns-resolve: true
-  dns:
-  - 1.1.1.1
 proxy-groups:
 - name: Available
   type: select
@@ -173,7 +156,6 @@ proxy-groups:
 - name: AI
   type: select
   proxies:
-  - WARP
   - US
   - SG
   - JP
@@ -186,7 +168,6 @@ proxy-groups:
 - name: Google
   type: select
   proxies:
-  - WARP
   - US
   - SG
   - JP

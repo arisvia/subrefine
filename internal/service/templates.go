@@ -4,103 +4,111 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
 
 	"github.com/arisvia/subrefine/internal/core/emitter"
 )
 
-// Templates is the startup-loaded registry of full-config templates, keyed by
-// mode name (tun, tproxy, mixed, ...). File naming is the contract:
+// Templates is the startup-loaded registry of full-config templates. There is
+// exactly ONE generic template per client family; the per-delivery options
+// (which inbounds, IPv6) are chosen at request time and baked into the link,
+// so a single template serves every combination. File naming is the contract:
 //
-//	<dir>/singbox.<mode>.json   official sing-box skeleton
-//	<dir>/clash.<mode>.yaml     mihomo skeleton (.yml accepted)
+//	<dir>/singbox.json   official sing-box skeleton
+//	<dir>/clash.yaml     mihomo skeleton (.yml accepted)
 //
 // A broken template fails the process at startup: an operator must never
-// discover at delivery time that the "tun" mode was silently unloadable.
+// discover at delivery time that the full-config path was silently unloadable.
 type Templates struct {
-	Singbox map[string]*emitter.SingboxTemplate
-	Clash   map[string]*emitter.ClashFullTemplate
+	Singbox *emitter.SingboxTemplate
+	Clash   *emitter.ClashFullTemplate
 }
 
-var (
-	singboxNameRE = regexp.MustCompile(`^singbox\.(.+)\.json$`)
-	clashNameRE   = regexp.MustCompile(`^clash\.(.+)\.ya?ml$`)
-)
-
-// LoadTemplates scans dir; an empty dir means the feature is off (nil, nil).
+// LoadTemplates reads the fixed template files from dir. An empty dir means
+// the feature is off (nil, nil); a missing individual file just means that
+// family has no full-config template.
 func LoadTemplates(dir string) (*Templates, error) {
 	if dir == "" {
 		return nil, nil
 	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("templates dir: %w", err)
+	t := &Templates{}
+
+	if data, ok, err := readTemplateFile(dir, "singbox.json"); err != nil {
+		return nil, err
+	} else if ok {
+		tmpl, err := emitter.LoadSingboxTemplate(data)
+		if err != nil {
+			return nil, fmt.Errorf("singbox.json: %w", err)
+		}
+		t.Singbox = tmpl
 	}
 
-	t := &Templates{
-		Singbox: map[string]*emitter.SingboxTemplate{},
-		Clash:   map[string]*emitter.ClashFullTemplate{},
-	}
-	for _, e := range entries {
-		if e.IsDir() {
+	for _, name := range []string{"clash.yaml", "clash.yml"} {
+		data, ok, err := readTemplateFile(dir, name)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
 			continue
 		}
-		name := e.Name()
-		path := filepath.Join(dir, name)
-		if m := singboxNameRE.FindStringSubmatch(name); m != nil {
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil, fmt.Errorf("read %s: %w", name, err)
-			}
-			tmpl, err := emitter.LoadSingboxTemplate(data)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", name, err)
-			}
-			t.Singbox[m[1]] = tmpl
-		} else if m := clashNameRE.FindStringSubmatch(name); m != nil {
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil, fmt.Errorf("read %s: %w", name, err)
-			}
-			tmpl, err := emitter.LoadClashFullTemplate(data)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", name, err)
-			}
-			t.Clash[m[1]] = tmpl
+		tmpl, err := emitter.LoadClashFullTemplate(data)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
 		}
+		t.Clash = tmpl
+		break
 	}
+
 	return t, nil
 }
 
-// Modes lists the registered mode names, for the admin endpoint and console.
-func (t *Templates) Modes() (singbox, clash []string) {
+func readTemplateFile(dir, name string) ([]byte, bool, error) {
+	data, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("read %s: %w", name, err)
+	}
+	return data, true, nil
+}
+
+// Empty reports whether no full-config template was loaded at all.
+func (t *Templates) Empty() bool { return t == nil || (t.Singbox == nil && t.Clash == nil) }
+
+// Options reports the declared inbound kinds per family so the console renders
+// only switches that mean something for the loaded templates.
+func (t *Templates) Options() (singbox, clash emitter.FamilyOptions) {
+	singbox, clash = emitter.FamilyOptions{Inbounds: []string{}}, emitter.FamilyOptions{Inbounds: []string{}}
 	if t == nil {
-		return nil, nil
+		return
 	}
-	for k := range t.Singbox {
-		singbox = append(singbox, k)
+	if t.Singbox != nil {
+		singbox.Available = true
+		if ins := t.Singbox.InboundOptions(); ins != nil {
+			singbox.Inbounds = ins
+		}
 	}
-	for k := range t.Clash {
-		clash = append(clash, k)
+	if t.Clash != nil {
+		clash.Available = true
+		if ins := t.Clash.InboundOptions(); ins != nil {
+			clash.Inbounds = ins
+		}
 	}
-	sort.Strings(singbox)
-	sort.Strings(clash)
 	return
 }
 
-// SingboxTemplate returns the named full-config template, nil when absent.
-func (t *Templates) SingboxTemplate(mode string) *emitter.SingboxTemplate {
+// SingboxTemplate returns the sing-box full-config template, nil when absent.
+func (t *Templates) SingboxTemplate() *emitter.SingboxTemplate {
 	if t == nil {
 		return nil
 	}
-	return t.Singbox[mode]
+	return t.Singbox
 }
 
-// ClashTemplate returns the named full-config template, nil when absent.
-func (t *Templates) ClashTemplate(mode string) *emitter.ClashFullTemplate {
+// ClashTemplate returns the clash full-config template, nil when absent.
+func (t *Templates) ClashTemplate() *emitter.ClashFullTemplate {
 	if t == nil {
 		return nil
 	}
-	return t.Clash[mode]
+	return t.Clash
 }

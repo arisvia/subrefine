@@ -180,57 +180,18 @@ func ToClashProxy(n *model.ProxyNode) (map[string]any, error) {
 	return p, nil
 }
 
-// ToClashYAML serializes nodes into a complete Clash.Meta configuration YAML.
+// ToClashYAML serializes nodes into a bare Clash.Meta proxy list — the
+// fragment form. It carries ONLY the nodes (no proxy-groups, no rules, no
+// listeners): a fragment is meant to be imported as a provider or merged into
+// a client's own config, so anything beyond the node list is noise. The
+// complete, loadable configuration (groups, rules, inbounds) is the
+// full-template render path, not this one.
 func ToClashYAML(nodes []*model.ProxyNode) ([]byte, error) {
 	proxies := make([]map[string]any, 0, len(nodes))
-	names := make([]string, 0, len(nodes))
-
 	for _, n := range nodes {
-		p, err := ToClashProxy(n)
-		if err == nil && p != nil {
+		if p, err := ToClashProxy(n); err == nil && p != nil {
 			proxies = append(proxies, p)
-			if name, ok := p["name"].(string); ok && name != "" {
-				names = append(names, name)
-			}
 		}
 	}
-
-	// A subscription filtered to zero nodes must still be a loadable config:
-	// mihomo rejects a url-test group with no proxies ("use or proxies
-	// missing"), so fall back to a bare DIRECT rule set instead of emitting
-	// empty AUTO/PROXIES groups.
-	if len(names) == 0 {
-		doc := map[string]any{
-			"proxies":      []map[string]any{},
-			"proxy-groups": []map[string]any{},
-			"rules":        []string{"MATCH,DIRECT"},
-		}
-		return yaml.Marshal(doc)
-	}
-
-	// Basic group structure
-	groups := []map[string]any{
-		{
-			"name":    "PROXIES",
-			"type":    "select",
-			"proxies": append([]string{"AUTO"}, names...),
-		},
-		{
-			"name":     "AUTO",
-			"type":     "url-test",
-			"url":      "https://cp.cloudflare.com/generate_204",
-			"interval": 300,
-			"proxies":  names,
-		},
-	}
-
-	doc := map[string]any{
-		"proxies":      proxies,
-		"proxy-groups": groups,
-		"rules": []string{
-			"MATCH,PROXIES",
-		},
-	}
-
-	return yaml.Marshal(doc)
+	return yaml.Marshal(map[string]any{"proxies": proxies})
 }
