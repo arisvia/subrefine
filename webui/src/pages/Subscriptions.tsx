@@ -195,7 +195,7 @@ const Subscriptions: Component = () => {
                               const expired = !!info.expire && info.expire * 1000 < Date.now()
                               const soon = !!info.expire && !expired && info.expire - Date.now() / 1000 < 7 * 86400
                               return (
-                                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono">
+                                <div class="mt-1.5 inline-flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-surface-inset/60 px-2 py-1 text-[11px] font-mono">
                                   <Show when={info.expire}>
                                     <span class={expired ? 'text-danger' : soon ? 'text-warning' : 'text-muted'}>
                                       {t('subs.expires')}: <span class="text-foreground">{formatExpiry(info.expire)}</span>
