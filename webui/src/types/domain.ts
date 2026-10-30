@@ -156,13 +156,5 @@ export const PROTOCOL_TONES: Record<Protocol, BadgeTone> = {
   wireguard: 'teal',
 }
 
-export const PIPELINE_TONES: Record<PipelineType, BadgeTone> = {
-  deduplicate: 'cyan',
-  filter: 'green',
-  rename: 'purple',
-  decorate: 'orange',
-  sort: 'gray',
-}
-
 /** uTLS fingerprints offered by the decorate operator (sing-box / mihomo set). */
 export const FINGERPRINTS = ['chrome', 'firefox', 'safari', 'edge', 'ios', 'android']

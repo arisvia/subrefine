@@ -235,8 +235,8 @@ export const zhCN = {
       order: '排序方向',
     },
     placeholder: {
-      include: '如 HK|JP（留空不限制）',
-      exclude: '如 剩余|流量（留空不排除）',
+      include: '如 HK|JP',
+      exclude: '如 剩余|流量',
       pattern: '如 ^(HK|JP)-(\\d+)',
       repl: '如 [$1] $2',
       detour: '如 WARP',

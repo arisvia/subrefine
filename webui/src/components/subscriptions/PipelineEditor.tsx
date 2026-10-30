@@ -4,7 +4,7 @@ import {
   Badge, Button, Checkbox, IconButton, Input, Select, IconChevronDown, IconChevronUp, IconSparkles, IconTrash,
 } from '@/components/ui'
 import {
-  FINGERPRINTS, PIPELINE_TONES, PROTOCOLS, PROTOCOL_LABELS,
+  FINGERPRINTS, PROTOCOLS, PROTOCOL_LABELS,
   type PipelineStep, type PipelineType, type Protocol,
 } from '@/types/domain'
 
@@ -68,8 +68,10 @@ export const PipelineEditor: Component<PipelineEditorProps> = props => {
           <For each={props.steps}>
             {(step, index) => (
               <div class="rounded-control border border-glass-border bg-surface-inset/60 p-2.5">
-                <div class="flex items-start gap-2">
-                  <div class="shrink-0 w-40">
+                {/* One shared rhythm for every kind: fixed type column, equal
+                    half-width parameter slots, actions vertically centered. */}
+                <div class="flex items-center gap-2">
+                  <div class="w-36 shrink-0">
                     <Select
                       size="sm"
                       ariaLabel={t('pipeline.title')}
@@ -79,60 +81,49 @@ export const PipelineEditor: Component<PipelineEditorProps> = props => {
                     />
                   </div>
 
-                  <div class="flex-1 min-w-0 flex flex-wrap items-center gap-2">
+                  <div class="grid min-w-0 flex-1 grid-cols-2 gap-2">
                     <Show when={step.type === 'filter'}>
-                      <Input size="sm" class="flex-1 min-w-36" ariaLabel={t('pipeline.field.include')}
+                      <Input size="sm" class="min-w-0" ariaLabel={t('pipeline.field.include')}
                         placeholder={t('pipeline.placeholder.include')}
                         value={step.include ?? ''} onInput={v => patch(index(), { include: v })} />
-                      <Input size="sm" class="flex-1 min-w-36" ariaLabel={t('pipeline.field.exclude')}
+                      <Input size="sm" class="min-w-0" ariaLabel={t('pipeline.field.exclude')}
                         placeholder={t('pipeline.placeholder.exclude')}
                         value={step.exclude ?? ''} onInput={v => patch(index(), { exclude: v })} />
                     </Show>
 
                     <Show when={step.type === 'rename'}>
-                      <Input size="sm" class="flex-1 min-w-40" ariaLabel={t('pipeline.field.pattern')}
+                      <Input size="sm" class="min-w-0" ariaLabel={t('pipeline.field.pattern')}
                         placeholder={t('pipeline.placeholder.pattern')}
                         value={step.pattern ?? ''} onInput={v => patch(index(), { pattern: v })} />
-                      <Input size="sm" class="flex-1 min-w-32" ariaLabel={t('pipeline.field.repl')}
+                      <Input size="sm" class="min-w-0" ariaLabel={t('pipeline.field.repl')}
                         placeholder={t('pipeline.placeholder.repl')}
                         value={step.repl ?? ''} onInput={v => patch(index(), { repl: v })} />
                     </Show>
 
                     <Show when={step.type === 'decorate'}>
-                      <div class="w-36 shrink-0">
-                        <Select
-                          size="sm"
-                          ariaLabel={t('pipeline.field.fingerprint')}
-                          value={step.fingerprint ?? ''}
-                          options={[{ value: '', label: t('pipeline.noFingerprint') },
-                            ...FINGERPRINTS.map(f => ({ value: f, label: f }))]}
-                          onChange={v => patch(index(), { fingerprint: v })}
-                        />
-                      </div>
-                      <Input size="sm" class="flex-1 min-w-28" ariaLabel={t('pipeline.field.detour')}
+                      <Select
+                        size="sm"
+                        ariaLabel={t('pipeline.field.fingerprint')}
+                        value={step.fingerprint ?? ''}
+                        options={[{ value: '', label: t('pipeline.noFingerprint') },
+                          ...FINGERPRINTS.map(f => ({ value: f, label: f }))]}
+                        onChange={v => patch(index(), { fingerprint: v })} />
+                      <Input size="sm" class="min-w-0" ariaLabel={t('pipeline.field.detour')}
                         placeholder={t('pipeline.placeholder.detour')}
                         value={step.detour ?? ''} onInput={v => patch(index(), { detour: v })} />
                     </Show>
 
                     <Show when={step.type === 'sort'}>
-                      <div class="w-32 shrink-0">
-                        <Select size="sm" ariaLabel={t('pipeline.field.by')} value={step.by ?? 'tag'}
-                          options={[{ value: 'tag', label: t('pipeline.byTag') }, { value: 'protocol', label: t('pipeline.byProtocol') }]}
-                          onChange={v => patch(index(), { by: v as PipelineStep['by'] })} />
-                      </div>
-                      <div class="w-32 shrink-0">
-                        <Select size="sm" ariaLabel={t('pipeline.field.order')} value={step.order ?? 'asc'}
-                          options={[{ value: 'asc', label: t('pipeline.orderAsc') }, { value: 'desc', label: t('pipeline.orderDesc') }]}
-                          onChange={v => patch(index(), { order: v as PipelineStep['order'] })} />
-                      </div>
-                    </Show>
-
-                    <Show when={step.type === 'deduplicate'}>
-                      <span class="text-xs text-faint">{t('pipeline.desc.deduplicate')}</span>
+                      <Select size="sm" ariaLabel={t('pipeline.field.by')} value={step.by ?? 'tag'}
+                        options={[{ value: 'tag', label: t('pipeline.byTag') }, { value: 'protocol', label: t('pipeline.byProtocol') }]}
+                        onChange={v => patch(index(), { by: v as PipelineStep['by'] })} />
+                      <Select size="sm" ariaLabel={t('pipeline.field.order')} value={step.order ?? 'asc'}
+                        options={[{ value: 'asc', label: t('pipeline.orderAsc') }, { value: 'desc', label: t('pipeline.orderDesc') }]}
+                        onChange={v => patch(index(), { order: v as PipelineStep['order'] })} />
                     </Show>
                   </div>
 
-                  <div class="flex items-center gap-0.5 shrink-0">
+                  <div class="flex shrink-0 items-center gap-0.5">
                     <IconButton size="sm" aria-label={t('pipeline.moveUp')} disabled={index() === 0}
                       onClick={() => move(index(), index() - 1)}>
                       <IconChevronUp size={14} />
@@ -149,14 +140,18 @@ export const PipelineEditor: Component<PipelineEditorProps> = props => {
                 </div>
 
                 <Show when={step.type === 'filter'}>
-                  <div class="mt-2.5 flex flex-wrap items-center gap-x-3.5 gap-y-2 pl-0.5">
-                    <span class="text-[11px] font-medium text-faint mr-1">{t('pipeline.field.types')}</span>
-                    <For each={PROTOCOLS}>
-                      {(p: Protocol) => {
-                        const checked = () => (step.types ?? []).includes(p)
-                        return (
+                  <div class="mt-2 space-y-1.5">
+                    <div class="flex items-center gap-1.5 text-[11px] font-medium text-faint">
+                      {t('pipeline.field.types')}
+                      <Show when={!(step.types ?? []).length}>
+                        <Badge tone="gray">{t('pipeline.keepAll')}</Badge>
+                      </Show>
+                    </div>
+                    <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3">
+                      <For each={PROTOCOLS}>
+                        {(p: Protocol) => (
                           <Checkbox
-                            checked={checked()}
+                            checked={(step.types ?? []).includes(p)}
                             label={PROTOCOL_LABELS[p]}
                             onChange={on => {
                               const cur = step.types ?? []
@@ -164,18 +159,14 @@ export const PipelineEditor: Component<PipelineEditorProps> = props => {
                               patch(index(), { types: types.length ? types : undefined })
                             }}
                           />
-                        )
-                      }}
-                    </For>
-                    <Show when={!(step.types ?? []).length}>
-                      <Badge tone="gray">{t('pipeline.keepAll')}</Badge>
-                    </Show>
+                        )}
+                      </For>
+                    </div>
                   </div>
                 </Show>
 
-                <div class="mt-1.5 flex items-center gap-2">
-                  <Badge tone={PIPELINE_TONES[step.type]}>{typeLabel(step.type)}</Badge>
-                  <span class="text-[11px] text-faint">{t(`pipeline.desc.${step.type}`)}</span>
+                <div class="mt-1.5 pl-[9.5rem] text-[11px] text-faint">
+                  {t(`pipeline.desc.${step.type}`)}
                 </div>
               </div>
             )}

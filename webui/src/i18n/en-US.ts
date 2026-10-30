@@ -237,8 +237,8 @@ export const enUS: TranslationDict = {
       order: 'Direction',
     },
     placeholder: {
-      include: 'e.g. HK|JP (empty = any)',
-      exclude: 'e.g. promo|traffic (empty = none)',
+      include: 'e.g. HK|JP',
+      exclude: 'e.g. promo|traffic',
       pattern: 'e.g. ^(HK|JP)-(\\d+)',
       repl: 'e.g. [$1] $2',
       detour: 'e.g. WARP',
