@@ -7,7 +7,7 @@ export type BadgeTone =
 
 /** Canonical protocol ids produced by internal/core/model. */
 export type Protocol =
-  | 'shadowsocks' | 'vmess' | 'vless' | 'trojan' | 'hysteria2' | 'wireguard'
+  | 'shadowsocks' | 'vmess' | 'vless' | 'trojan' | 'hysteria2' | 'wireguard' | 'anytls'
 
 export type PipelineType = 'deduplicate' | 'filter' | 'rename' | 'decorate' | 'sort'
 
@@ -136,7 +136,7 @@ export interface AdminInfo {
 }
 
 /** Shorthand spellings users type; resolved server-side by the pipeline alias table. */
-export const PROTOCOLS: Protocol[] = ['shadowsocks', 'vmess', 'vless', 'trojan', 'hysteria2', 'wireguard']
+export const PROTOCOLS: Protocol[] = ['shadowsocks', 'vmess', 'vless', 'trojan', 'hysteria2', 'wireguard', 'anytls']
 
 export const PROTOCOL_LABELS: Record<Protocol, string> = {
   shadowsocks: 'Shadowsocks',
@@ -145,6 +145,7 @@ export const PROTOCOL_LABELS: Record<Protocol, string> = {
   trojan: 'Trojan',
   hysteria2: 'Hysteria2',
   wireguard: 'WireGuard',
+  anytls: 'AnyTLS',
 }
 
 export const PROTOCOL_TONES: Record<Protocol, BadgeTone> = {
@@ -154,6 +155,7 @@ export const PROTOCOL_TONES: Record<Protocol, BadgeTone> = {
   trojan: 'amber',
   hysteria2: 'rose',
   wireguard: 'teal',
+  anytls: 'green',
 }
 
 /** uTLS fingerprints offered by the decorate operator (sing-box / mihomo set). */

@@ -79,6 +79,8 @@ var protoAliases = map[string]string{
 	"hysteria2":   model.ProtoHysteria2,
 	"wg":          model.ProtoWireGuard,
 	"wireguard":   model.ProtoWireGuard,
+	"anytls":      model.ProtoAnyTLS,
+	"at":          model.ProtoAnyTLS,
 }
 
 func normalizeProtocol(s string) (string, bool) {

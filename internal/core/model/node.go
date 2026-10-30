@@ -15,6 +15,7 @@ const (
 	ProtoTrojan      = "trojan"
 	ProtoHysteria2   = "hysteria2"
 	ProtoWireGuard   = "wireguard"
+	ProtoAnyTLS      = "anytls"
 )
 
 // Transport types

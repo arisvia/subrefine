@@ -89,6 +89,22 @@ func ToClashProxy(n *model.ProxyNode) (map[string]any, error) {
 			}
 		}
 
+	case model.ProtoAnyTLS:
+		p["type"] = "anytls"
+		p["password"] = n.Password
+		if n.ServerName != "" {
+			p["sni"] = n.ServerName
+		}
+		if n.Fingerprint != "" {
+			p["client-fingerprint"] = n.Fingerprint
+		}
+		if n.Insecure {
+			p["skip-cert-verify"] = true
+		}
+		if len(n.ALPN) > 0 {
+			p["alpn"] = n.ALPN
+		}
+
 	case model.ProtoHysteria2:
 		p["type"] = "hysteria2"
 		p["password"] = n.Password

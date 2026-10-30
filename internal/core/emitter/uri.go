@@ -30,6 +30,8 @@ func ToURI(n *model.ProxyNode) (string, error) {
 		return emitVLESS(n)
 	case model.ProtoTrojan:
 		return emitTrojan(n)
+	case model.ProtoAnyTLS:
+		return emitAnyTLS(n)
 	case model.ProtoHysteria2:
 		return emitHysteria2(n)
 	case model.ProtoVMess:
@@ -136,6 +138,36 @@ func emitTrojan(n *model.ProxyNode) (string, error) {
 
 	query := v.Encode()
 	uri := fmt.Sprintf("trojan://%s@%s", url.QueryEscape(n.Password), hostPort)
+	if query != "" {
+		uri += "?" + query
+	}
+	if n.Tag != "" {
+		uri += "#" + url.QueryEscape(n.Tag)
+	}
+	return uri, nil
+}
+
+// emitAnyTLS writes the anytls:// URI form. AnyTLS is TLS-fixed, so only the
+// handshake parameters round-trip.
+func emitAnyTLS(n *model.ProxyNode) (string, error) {
+	hostPort := net.JoinHostPort(n.Server, strconv.Itoa(n.Port))
+	v := url.Values{}
+
+	if n.ServerName != "" {
+		v.Set("sni", n.ServerName)
+	}
+	if n.Fingerprint != "" {
+		v.Set("fp", n.Fingerprint)
+	}
+	if n.Insecure {
+		v.Set("insecure", "1")
+	}
+	if len(n.ALPN) > 0 {
+		v.Set("alpn", strings.Join(n.ALPN, ","))
+	}
+
+	query := v.Encode()
+	uri := fmt.Sprintf("anytls://%s@%s", url.QueryEscape(n.Password), hostPort)
 	if query != "" {
 		uri += "?" + query
 	}

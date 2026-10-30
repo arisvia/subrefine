@@ -115,6 +115,28 @@ func ToSingboxOutbound(n *model.ProxyNode) (map[string]any, error) {
 			out["transport"] = tr
 		}
 
+	case model.ProtoAnyTLS:
+		out["password"] = n.Password
+		tls := map[string]any{
+			"enabled": true,
+		}
+		if n.ServerName != "" {
+			tls["server_name"] = n.ServerName
+		}
+		if n.Insecure {
+			tls["insecure"] = true
+		}
+		if len(n.ALPN) > 0 {
+			tls["alpn"] = n.ALPN
+		}
+		if n.Fingerprint != "" {
+			tls["utls"] = map[string]any{
+				"enabled":     true,
+				"fingerprint": n.Fingerprint,
+			}
+		}
+		out["tls"] = tls
+
 	case model.ProtoHysteria2:
 		out["password"] = n.Password
 		if n.UpMbps > 0 {

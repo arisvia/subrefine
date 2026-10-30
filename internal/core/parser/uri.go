@@ -43,6 +43,8 @@ func ParseURI(raw string) (*model.ProxyNode, error) {
 		return parseVLESS(u, tag)
 	case "trojan":
 		return parseTrojan(u, tag)
+	case "anytls":
+		return parseAnyTLS(u, tag)
 	case "hy2", "hysteria2":
 		return parseHysteria2(u, tag)
 	case "vmess":
@@ -235,6 +237,45 @@ func parseTrojan(u *url.URL, tag string) (*model.ProxyNode, error) {
 
 	if node.Tag == "" {
 		node.Tag = fmt.Sprintf("Trojan-%s:%d", node.Server, node.Port)
+	}
+	return node, nil
+}
+
+// parseAnyTLS handles the anytls:// scheme (AnyTLS, a password-based TLS
+// proxy). It is transport-fixed (raw TCP + TLS, no ws/grpc), so only the TLS
+// handshake parameters are read.
+func parseAnyTLS(u *url.URL, tag string) (*model.ProxyNode, error) {
+	node := &model.ProxyNode{
+		Type:     model.ProtoAnyTLS,
+		Tag:      tag,
+		Password: u.User.Username(),
+		Server:   u.Hostname(),
+	}
+
+	port, err := parsePort(u.Port())
+	if err != nil {
+		return nil, err
+	}
+	node.Port = port
+
+	node.Network = model.TransportTCP
+	node.Security = model.SecurityTLS
+
+	q := u.Query()
+	node.ServerName = q.Get("sni")
+	if node.ServerName == "" {
+		node.ServerName = q.Get("peer")
+	}
+	node.Fingerprint = q.Get("fp")
+	if alpn := q.Get("alpn"); alpn != "" {
+		node.ALPN = strings.Split(alpn, ",")
+	}
+	if q.Get("insecure") == "1" || q.Get("allowInsecure") == "1" || q.Get("allow-insecure") == "1" {
+		node.Insecure = true
+	}
+
+	if node.Tag == "" {
+		node.Tag = fmt.Sprintf("AnyTLS-%s:%d", node.Server, node.Port)
 	}
 	return node, nil
 }
