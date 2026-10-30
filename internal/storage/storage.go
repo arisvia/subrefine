@@ -38,6 +38,7 @@ type PipelineStep struct {
 	Detour      string   `json:"detour,omitempty"`      // decorate
 	By          string   `json:"by,omitempty"`          // sort: tag | protocol
 	Order       string   `json:"order,omitempty"`       // sort: asc | desc
+	FlagMode    string   `json:"flag_mode,omitempty"`   // flag: add | remove | normalize
 }
 
 // SubKeyRef attaches a global delivery key to a subscription. The blacklist of

@@ -215,6 +215,7 @@ export const zhCN = {
       rename: '正则重命名',
       decorate: '属性修饰',
       sort: '排序',
+      flag: '国家旗帜',
     },
     desc: {
       deduplicate: '按 协议 + 地址 + 端口 + 凭证 + 密钥 归并重复节点',
@@ -222,6 +223,7 @@ export const zhCN = {
       rename: '用正则表达式改写节点标签',
       decorate: '批量注入 uTLS 指纹与 detour 出站',
       sort: '按标签或协议排序',
+      flag: '按内置国家/城市词库识别标签并加或去旗帜；生僻名称请配合前置「正则重命名」归一',
     },
     field: {
       include: '保留正则',
@@ -233,6 +235,7 @@ export const zhCN = {
       detour: 'detour 出站',
       by: '排序依据',
       order: '排序方向',
+      flagMode: '旗帜动作',
     },
     placeholder: {
       include: '如 HK|JP',
@@ -247,6 +250,9 @@ export const zhCN = {
     byProtocol: '按协议',
     orderAsc: '升序',
     orderDesc: '降序',
+    flagAdd: '添加旗帜',
+    flagRemove: '移除旗帜',
+    flagNormalize: '规范化旗帜',
   },
   preview: {
     title: '节点预览 · {id}',

@@ -16,6 +16,7 @@ var knownTypes = map[string]bool{
 	"deduplicate": true,
 	"decorate":    true,
 	"sort":        true,
+	"flag":        true,
 }
 
 // ValidateSteps reports pipeline configuration that would silently do something
@@ -25,7 +26,7 @@ var knownTypes = map[string]bool{
 func ValidateSteps(steps []storage.PipelineStep) error {
 	for i, step := range steps {
 		if !knownTypes[step.Type] {
-			return fmt.Errorf("pipeline step %d: unknown operator %q (supported: rename, filter, deduplicate, decorate, sort)", i+1, step.Type)
+			return fmt.Errorf("pipeline step %d: unknown operator %q (supported: rename, filter, deduplicate, decorate, sort, flag)", i+1, step.Type)
 		}
 		at := func(err error) error {
 			return fmt.Errorf("pipeline step %d (%s): %w", i+1, step.Type, err)
@@ -55,6 +56,12 @@ func ValidateSteps(steps []storage.PipelineStep) error {
 			case "", "asc", "desc":
 			default:
 				return at(fmt.Errorf("unknown sort order %q (supported: asc, desc)", step.Order))
+			}
+		case "flag":
+			switch step.FlagMode {
+			case "", "add", "remove", "normalize":
+			default:
+				return at(fmt.Errorf("unknown flag mode %q (supported: add, remove, normalize)", step.FlagMode))
 			}
 		}
 	}

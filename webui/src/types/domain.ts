@@ -9,7 +9,7 @@ export type BadgeTone =
 export type Protocol =
   | 'shadowsocks' | 'vmess' | 'vless' | 'trojan' | 'hysteria2' | 'wireguard' | 'anytls'
 
-export type PipelineType = 'deduplicate' | 'filter' | 'rename' | 'decorate' | 'sort'
+export type PipelineType = 'deduplicate' | 'filter' | 'rename' | 'decorate' | 'sort' | 'flag'
 
 export interface ProxyNode {
   tag: string
@@ -58,6 +58,7 @@ export interface PipelineStep {
   detour?: string
   by?: 'tag' | 'protocol'
   order?: 'asc' | 'desc'
+  flag_mode?: 'add' | 'remove' | 'normalize'
 }
 
 /** A global delivery credential, shared by any number of subscriptions. */

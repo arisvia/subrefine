@@ -8,7 +8,7 @@ import {
   type PipelineStep, type PipelineType, type Protocol,
 } from '@/types/domain'
 
-const STEP_ORDER: PipelineType[] = ['filter', 'rename', 'deduplicate', 'decorate', 'sort']
+const STEP_ORDER: PipelineType[] = ['filter', 'rename', 'deduplicate', 'decorate', 'sort', 'flag']
 
 export interface PipelineEditorProps {
   steps: PipelineStep[]
@@ -22,6 +22,7 @@ function blankStep(type: PipelineType): PipelineStep {
     case 'rename': return { type, pattern: '', repl: '' }
     case 'decorate': return { type, fingerprint: '', detour: '' }
     case 'sort': return { type, by: 'tag', order: 'asc' }
+    case 'flag': return { type, flag_mode: 'add' }
     default: return { type }
   }
 }
@@ -120,6 +121,16 @@ export const PipelineEditor: Component<PipelineEditorProps> = props => {
                       <Select size="sm" ariaLabel={t('pipeline.field.order')} value={step.order ?? 'asc'}
                         options={[{ value: 'asc', label: t('pipeline.orderAsc') }, { value: 'desc', label: t('pipeline.orderDesc') }]}
                         onChange={v => patch(index(), { order: v as PipelineStep['order'] })} />
+                    </Show>
+
+                    <Show when={step.type === 'flag'}>
+                      <Select size="sm" ariaLabel={t('pipeline.field.flagMode')} value={step.flag_mode ?? 'add'}
+                        options={[
+                          { value: 'add', label: t('pipeline.flagAdd') },
+                          { value: 'remove', label: t('pipeline.flagRemove') },
+                          { value: 'normalize', label: t('pipeline.flagNormalize') },
+                        ]}
+                        onChange={v => patch(index(), { flag_mode: v as PipelineStep['flag_mode'] })} />
                     </Show>
                   </div>
 

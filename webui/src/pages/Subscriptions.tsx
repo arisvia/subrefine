@@ -21,6 +21,7 @@ const STEP_LABEL_KEYS = {
   rename: 'pipeline.type.rename',
   decorate: 'pipeline.type.decorate',
   sort: 'pipeline.type.sort',
+  flag: 'pipeline.type.flag',
 } as const satisfies Record<PipelineStep['type'], I18nKey>
 
 const Subscriptions: Component = () => {

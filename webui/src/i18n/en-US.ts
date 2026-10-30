@@ -217,6 +217,7 @@ export const enUS: TranslationDict = {
       rename: 'Regex rename',
       decorate: 'Decorate',
       sort: 'Sort',
+      flag: 'Country flag',
     },
     desc: {
       deduplicate: 'Merge nodes sharing protocol + endpoint + credentials + keys',
@@ -224,6 +225,7 @@ export const enUS: TranslationDict = {
       rename: 'Rewrite node tags with a regex',
       decorate: 'Inject uTLS fingerprint and detour outbound in bulk',
       sort: 'Sort by tag or protocol',
+      flag: 'Detect country/city from the built-in dictionary and add or strip flags; pair a rename step first for exotic names',
     },
     field: {
       include: 'Include regex',
@@ -235,6 +237,7 @@ export const enUS: TranslationDict = {
       detour: 'Detour outbound',
       by: 'Sort key',
       order: 'Direction',
+      flagMode: 'Flag action',
     },
     placeholder: {
       include: 'e.g. HK|JP',
@@ -249,6 +252,9 @@ export const enUS: TranslationDict = {
     byProtocol: 'By protocol',
     orderAsc: 'Ascending',
     orderDesc: 'Descending',
+    flagAdd: 'Add flag',
+    flagRemove: 'Remove flag',
+    flagNormalize: 'Normalize flag',
   },
   preview: {
     title: 'Node preview · {id}',

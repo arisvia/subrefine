@@ -307,6 +307,8 @@ func (m *Manager) applyPipeline(nodes []*model.ProxyNode, steps []storage.Pipeli
 				Fingerprint: step.Fingerprint,
 				Detour:      step.Detour,
 			})
+		case "flag":
+			current = pipeline.Flag(current, step.FlagMode)
 		}
 	}
 	return current
